@@ -25,6 +25,7 @@ import {
   addExternalMarks,
   clearExternalMarks,
   commentHighlighter,
+  removeMarkRange,
   externalMarksField,
   readMarks,
 } from "./marks";
@@ -114,6 +115,7 @@ interface PersistedData {
 
 export interface MarkListing {
   from: number;
+  to: number;
   line: number;
   excerpt: string;
   slot: number;
@@ -880,17 +882,17 @@ export default class LiveCoEditPlugin extends Plugin {
   // Selection-scoped edit requests: quote the passage into the chat together
   // with its location, so the collaborator edits exactly that spot.
   private askAboutSelection(editor: Editor, view: MarkdownView) {
-    const selection = editor.getSelection();
+    // Derive the selected text from the document by offsets rather than
+    // trusting editor.getSelection(): other plugins can and do patch that
+    // method, and a non-string return here once produced "[object Object]".
+    const from = editor.posToOffset(editor.getCursor("from"));
+    const to = editor.posToOffset(editor.getCursor("to"));
+    const selection = String(editor.getValue()).slice(from, to);
     if (!view.file || !selection.trim()) {
       new Notice("Select some text first.");
       return;
     }
-    this.openAskModal(
-      view,
-      selection,
-      editor.posToOffset(editor.getCursor("from")),
-      editor.posToOffset(editor.getCursor("to"))
-    );
+    this.openAskModal(view, selection, from, to);
   }
 
   private openAskModal(
@@ -1100,6 +1102,17 @@ export default class LiveCoEditPlugin extends Plugin {
     }
   }
 
+  // Dismiss a single collaborator mark (leave the rest).
+  dismissMark(path: string, from: number, to: number) {
+    const editor = this.findEditorFor(path);
+    const view = editor ? this.editorView(editor) : null;
+    if (view) {
+      view.dispatch({ effects: removeMarkRange.of({ from, to }) });
+      void this.persistAllMarks();
+      this.refreshPanel();
+    }
+  }
+
   clearHighlightsFor(path: string) {
     const editor = this.findEditorFor(path);
     const view = editor ? this.editorView(editor) : null;
@@ -1120,6 +1133,7 @@ export default class LiveCoEditPlugin extends Plugin {
       const raw = text.slice(m.from, Math.min(m.to, m.from + 42));
       return {
         from: m.from,
+        to: m.to,
         line,
         excerpt: raw.replace(/\n/g, " ⏎ ") + (m.to - m.from > 42 ? "…" : ""),
         slot: m.slot,
@@ -1526,7 +1540,16 @@ class AskModal extends Modal {
   constructor(app: App, selection: string, onDone: (instruction: string) => void) {
     super(app);
     // Defensive: whatever arrives, the preview shows text, never an object.
-    this.selection = typeof selection === "string" ? selection : String(selection ?? "");
+    if (typeof selection === "string") {
+      this.selection = selection;
+    } else {
+      console.warn(
+        "AI Co-Editor: non-string selection reached AskModal:",
+        typeof selection,
+        selection
+      );
+      this.selection = "(could not capture the selected text; your instruction will still be sent)";
+    }
     this.onDone = onDone;
   }
 

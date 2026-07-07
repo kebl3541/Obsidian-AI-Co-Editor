@@ -164,6 +164,10 @@ export class CoEditPanelView extends ItemView {
           text: m.name,
         });
         row.createSpan({ cls: "live-coedit-lineno", text: `L${m.line + 1}` });
+        const seen = this.iconBtn(row, "check", "Mark this one as seen", () => {
+          this.plugin.dismissMark(file.path, m.from, m.to);
+        });
+        seen.addEventListener("click", (e) => e.stopPropagation());
         row.createSpan({ cls: "live-coedit-excerpt", text: m.excerpt });
         row.addEventListener("click", () => void this.plugin.jumpTo(file.path, m.from));
       }

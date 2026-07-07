@@ -31,6 +31,7 @@ export const addExternalMarks = StateEffect.define<{
   slot: number;
 }>();
 export const clearExternalMarks = StateEffect.define<null>();
+export const removeMarkRange = StateEffect.define<MarkRange>();
 
 const slotMarks: Decoration[] = [];
 for (let i = 1; i <= SLOT_COUNT; i++) {
@@ -62,6 +63,11 @@ export const externalMarksField = StateField.define<DecorationSet>({
         });
       } else if (e.is(clearExternalMarks)) {
         deco = Decoration.none;
+      } else if (e.is(removeMarkRange)) {
+        const target = e.value;
+        deco = deco.update({
+          filter: (from, to) => to <= target.from || from >= target.to,
+        });
       }
     }
     return deco;
