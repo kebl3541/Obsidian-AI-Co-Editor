@@ -1,11 +1,14 @@
 {
   "id": "live-coedit",
   "name": "Live Co-Edit",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "minAppVersion": "1.4.0",
   "description": "Co-edit open notes with external tools (AI assistants, scripts, other editors): changes on disk merge live into your editor without losing your typing.",
   "author": "kebl3541",
   "authorUrl": "https://github.com/kebl3541",
-  "fundingUrl": "https://buymeacoffee.com/philosophizer",
+  "fundingUrl": {
+    "Buy Me a Coffee": "https://buymeacoffee.com/philosophizer",
+    "PayPal": "https://www.paypal.com/donate/?business=berlin.philosophy%40gmail.com&no_recurring=0&currency_code=EUR"
+  },
   "isDesktopOnly": false
 }
