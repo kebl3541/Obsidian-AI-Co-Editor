@@ -1290,6 +1290,16 @@ export default class LiveCoEditPlugin extends Plugin {
     });
   }
 
+  // True when the note is open and the proposal is rendering as in-text
+  // ghosts, so other surfaces can stay out of the way.
+  inlineActiveFor(path: string): boolean {
+    if (!this.settings.inlineProposals || !this.pending.has(path)) return false;
+    const editor = this.findEditorFor(path);
+    if (!editor) return false;
+    const data = this.getReviewData(path);
+    return !!data && editor.getValue() === data.buffer;
+  }
+
   // Accept or reject ONE change from a pending proposal, in place.
   async resolveProposal(path: string, index: number, accept: boolean) {
     const pend = this.pending.get(path);
@@ -1301,38 +1311,22 @@ export default class LiveCoEditPlugin extends Plugin {
     if (index < 0 || index >= proposals.length) return;
 
     if (accept) {
-      // Apply just this hunk to the buffer; the recomputation then treats it
-      // as agreed text and the remaining hunks stay pending.
-      let bufferOffset = 0;
-      let idx = 0;
-      for (const seg of data.segments) {
-        if (seg.kind === "plain") {
-          for (const l of seg.lines) bufferOffset += l.length + 1;
-          continue;
-        }
-        const mineText = seg.mine.join("\n");
-        if (idx === index) {
-          const before = editor.getValue();
-          await this.snapshots.save(path, before);
-          const theirsText = seg.theirs.join("\n");
-          editor.replaceRange(
-            theirsText,
-            editor.offsetToPos(bufferOffset),
-            editor.offsetToPos(bufferOffset + mineText.length)
-          );
-          this.markExternalChanges(
-            editor,
-            before,
-            editor.getValue(),
-            this.slotFor(pend.collaborator)
-          );
-          await this.appendAudit(pend.collaborator, path, before, editor.getValue());
-          this.log(`you accepted 1 change from ${pend.collaborator} in ${path}`);
-          break;
-        }
-        bufferOffset += mineText.length + 1;
-        idx++;
-      }
+      // Compose the document with exactly this hunk taken, using the same
+      // engine as the review dialog. Never hand-rolled offsets: an earlier
+      // version ate a newline that way.
+      const choices = proposals.map((_, k) => k === index);
+      const newBuffer = composeSegments(data.segments, choices);
+      const before = editor.getValue();
+      await this.snapshots.save(path, before);
+      this.applyMinimalEdit(editor, newBuffer);
+      this.markExternalChanges(
+        editor,
+        before,
+        newBuffer,
+        this.slotFor(pend.collaborator)
+      );
+      await this.appendAudit(pend.collaborator, path, before, newBuffer);
+      this.log(`you accepted 1 change from ${pend.collaborator} in ${path}`);
     } else {
       // Fold this hunk back to the user's version inside the proposal.
       const choices = proposals.map((_, k) => k !== index);

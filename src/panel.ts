@@ -136,10 +136,16 @@ export class CoEditPanelView extends ItemView {
           attr: { title: path },
         });
         const summary = this.plugin.pendingSummary(path);
+        const inline = this.plugin.inlineActiveFor(path);
         if (summary) {
-          row.createSpan({ cls: "live-coedit-excerpt", text: summary });
+          row.createSpan({
+            cls: "live-coedit-excerpt",
+            text: inline ? `${summary} · review in the note` : summary,
+          });
         }
-        this.renderPendingPreview(row, path);
+        // When the ghosts are on the page, the page is the review surface;
+        // the panel keeps only the bulk buttons.
+        if (!inline) this.renderPendingPreview(row, path);
         const review = row.createEl("button", { text: "Review" });
         review.addClass("mod-cta");
         review.addEventListener("click", () => this.plugin.openReview(path));
