@@ -1294,7 +1294,7 @@ export default class LiveCoEditPlugin extends Plugin {
       if (!hasAdd) {
         adds.push({ pos: lastDelEnd, text: "", proposalIndex: idx });
       }
-      bufferOffset += mineText.length + 1;
+      for (const l of seg.mine) bufferOffset += l.length + 1;
       idx++;
     }
 
@@ -1311,10 +1311,18 @@ export default class LiveCoEditPlugin extends Plugin {
   // ghosts, so other surfaces can stay out of the way.
   inlineActiveFor(path: string): boolean {
     if (!this.settings.inlineProposals || !this.pending.has(path)) return false;
-    const editor = this.findEditorFor(path);
-    if (!editor) return false;
-    const data = this.getReviewData(path);
-    return !!data && editor.getValue() === data.buffer;
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (
+        view instanceof MarkdownView &&
+        view.file?.path === path &&
+        view.getMode() === "source"
+      ) {
+        const data = this.getReviewData(path);
+        return !!data && view.editor.getValue() === data.buffer;
+      }
+    }
+    return false;
   }
 
   // Accept or reject ONE change from a pending proposal, in place.

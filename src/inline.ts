@@ -40,18 +40,19 @@ class AddWidget extends WidgetType {
     return other.text === this.text && other.proposalIndex === this.proposalIndex;
   }
 
-  toDOM(): HTMLElement {
-    const span = document.createElement("span");
+  toDOM(view: EditorView): HTMLElement {
+    const doc = view.dom.ownerDocument;
+    const span = doc.createElement("span");
     span.className = "live-coedit-ghost";
     if (this.text.length > 0) {
-      const txt = document.createElement("span");
+      const txt = doc.createElement("span");
       txt.className = "live-coedit-ghost-text";
       txt.textContent = this.text;
       span.appendChild(txt);
     }
 
     const mk = (label: string, cls: string, accept: boolean) => {
-      const b = document.createElement("button");
+      const b = doc.createElement("button");
       b.className = `live-coedit-ghost-btn ${cls}`;
       b.textContent = label;
       b.title = accept ? "Accept this change" : "Reject this change";
@@ -76,12 +77,10 @@ class AddWidget extends WidgetType {
   }
 }
 
-const delMark = (proposalIndex: number) =>
-  Decoration.mark({
-    class: "live-coedit-prop-del",
-    attributes: { title: "Proposed deletion" },
-    proposalIndex,
-  } as Parameters<typeof Decoration.mark>[0]);
+const delMark = Decoration.mark({
+  class: "live-coedit-prop-del",
+  attributes: { title: "Proposed deletion" },
+});
 
 export const inlineProposalsField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -92,7 +91,7 @@ export const inlineProposalsField = StateField.define<DecorationSet>({
         const spec = e.value;
         const ranges = [];
         for (const d of spec.dels) {
-          if (d.to > d.from) ranges.push(delMark(d.proposalIndex).range(d.from, d.to));
+          if (d.to > d.from) ranges.push(delMark.range(d.from, d.to));
         }
         for (const a of spec.adds) {
           ranges.push(
