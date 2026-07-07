@@ -332,17 +332,22 @@ export class CoEditPanelView extends ItemView {
       }
     );
 
-    const log = s.createDiv({ cls: "live-coedit-chatlog" });
-    for (const m of msgs) {
-      const row = log.createDiv({ cls: "live-coedit-chatmsg" });
-      row.createSpan({
-        cls: "live-coedit-chip",
-        text: m.target ? `${m.name} → ${m.target}` : m.name,
-      });
-      row.createSpan({ cls: "live-coedit-lineno", text: ` ${m.time}` });
-      row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+    // No empty box when there is nothing to show.
+    // No empty box when there is nothing to show.
+    const log =
+      msgs.length > 0 ? s.createDiv({ cls: "live-coedit-chatlog" }) : null;
+    if (log) {
+      for (const m of msgs) {
+        const row = log.createDiv({ cls: "live-coedit-chatmsg" });
+        row.createSpan({
+          cls: "live-coedit-chip",
+          text: m.target ? `${m.name} → ${m.target}` : m.name,
+        });
+        row.createSpan({ cls: "live-coedit-lineno", text: ` ${m.time}` });
+        row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+      }
+      log.scrollTop = log.scrollHeight;
     }
-    log.scrollTop = log.scrollHeight;
 
     // Liveness: show when the collaborator reports it is actively working.
     const status = this.plugin.collabStatus;
@@ -381,7 +386,9 @@ export class CoEditPanelView extends ItemView {
     btn.addClass("mod-cta");
     btn.addEventListener("click", send);
     // Scroll the chat into view for fast back-and-forth.
-    window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
+    if (log) {
+      window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
+    }
   }
 
   // Collapsible section: click the header to fold/unfold; the collapsed set

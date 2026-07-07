@@ -429,3 +429,13 @@
 .live-coedit-hunk:hover {
   border-color: var(--interactive-accent);
 }
+
+/* Composer alignment: Send hugs the bottom of the text box. */
+.live-coedit-composer {
+  align-items: flex-end;
+}
+
+.live-coedit-composer button {
+  height: auto;
+  padding: 6px 14px;
+}
