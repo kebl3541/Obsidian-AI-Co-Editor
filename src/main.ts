@@ -127,6 +127,11 @@ export default class LiveCoEditPlugin extends Plugin {
   private snapshots!: SnapshotStore;
   private identityCache: { name: string; at: number } = { name: "", at: 0 };
 
+  // Collaborator liveness: external tools write
+  // {"name":"claude","state":"working"|"idle","ts":<ms>} to
+  // <configDir>/live-coedit-status.json while they work.
+  collabStatus: { name: string; state: string; ts: number } | null = null;
+
   async onload() {
     await this.loadPersisted();
 
@@ -137,6 +142,9 @@ export default class LiveCoEditPlugin extends Plugin {
     );
 
     this.statusEl = this.addStatusBarItem();
+    this.statusEl.addClass("live-coedit-statusbar");
+    this.statusEl.setAttribute("aria-label", "Open co-edit panel");
+    this.statusEl.addEventListener("click", () => void this.openPanel());
     this.setStatus("ready");
 
     this.registerEditorExtension([externalMarksField, commentHighlighter]);
@@ -186,6 +194,26 @@ export default class LiveCoEditPlugin extends Plugin {
       id: "review-pending-edit",
       name: "Review pending external edit",
       callback: () => this.reviewCommand(),
+    });
+    this.addCommand({
+      id: "accept-all-active",
+      name: "Accept all pending changes in active file",
+      checkCallback: (checking) => {
+        const f = this.app.workspace.getActiveFile();
+        const has = !!f && this.pending.has(f.path);
+        if (!checking && f && has) void this.acceptAllPending(f.path);
+        return has;
+      },
+    });
+    this.addCommand({
+      id: "reject-active",
+      name: "Reject pending changes in active file",
+      checkCallback: (checking) => {
+        const f = this.app.workspace.getActiveFile();
+        const has = !!f && this.pending.has(f.path);
+        if (!checking && f && has) void this.rejectPending(f.path);
+        return has;
+      },
     });
     this.addCommand({
       id: "ask-edit-selection",
@@ -245,6 +273,21 @@ export default class LiveCoEditPlugin extends Plugin {
     // Periodically persist highlight positions so they survive restarts.
     this.registerInterval(
       window.setInterval(() => void this.persistAllMarks(), 60_000)
+    );
+
+    // Watch the collaborator's liveness signal (working / idle).
+    this.registerInterval(
+      window.setInterval(() => void this.pollCollabStatus(), 2_000)
+    );
+
+    // Keep the panel current while the note (comments, marks) changes —
+    // debounced, and never while the user is typing in the chat box.
+    let refreshTimer: number | null = null;
+    this.registerEvent(
+      this.app.workspace.on("editor-change", () => {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(() => this.refreshPanel(), 900);
+      })
     );
 
     // A co-edit button in every note's own toolbar (top-right of the pane).
@@ -605,6 +648,49 @@ export default class LiveCoEditPlugin extends Plugin {
     this.dropPending(path);
     this.log(`you rejected the edit from ${pend?.collaborator ?? "collaborator"} in ${path}`);
     this.setStatus(`rejected external edit at ${new Date().toLocaleTimeString()}`);
+  }
+
+  private async pollCollabStatus() {
+    try {
+      const p = `${this.app.vault.configDir}/live-coedit-status.json`;
+      if (!(await this.app.vault.adapter.exists(p))) return;
+      const parsed = JSON.parse(await this.app.vault.adapter.read(p)) as {
+        name?: string;
+        state?: string;
+        ts?: number;
+      };
+      const next = {
+        name: parsed.name ?? "collaborator",
+        state: parsed.state ?? "idle",
+        ts: parsed.ts ?? 0,
+      };
+      const changed =
+        this.collabStatus?.state !== next.state ||
+        this.collabStatus?.name !== next.name;
+      this.collabStatus = next;
+      if (changed) this.refreshPanel();
+    } catch {
+      // unreadable signal file: ignore
+    }
+  }
+
+  // Quick summary of a pending proposal for the panel row.
+  pendingSummary(path: string): string | null {
+    const data = this.getReviewData(path);
+    if (!data) return null;
+    let changes = 0;
+    let added = 0;
+    let removed = 0;
+    for (const seg of data.segments) {
+      if (seg.kind !== "proposal") continue;
+      changes++;
+      for (const tok of diffWords(seg.mine.join("\n"), seg.theirs.join("\n"))) {
+        const words = tok.text.trim().split(/\s+/).filter(Boolean).length;
+        if (tok.kind === "add") added += words;
+        else if (tok.kind === "del") removed += words;
+      }
+    }
+    return `${changes} change${changes === 1 ? "" : "s"} · +${added}/−${removed} words`;
   }
 
   // Accept everything in a pending proposal without opening the dialog.

@@ -67,6 +67,12 @@ export class CoEditPanelView extends ItemView {
   private refreshGen = 0;
 
   async refresh(): Promise<void> {
+    // Never rebuild the panel out from under the user's chat draft.
+    const active = this.contentEl.ownerDocument.activeElement;
+    if (active && this.contentEl.contains(active) && active.matches("textarea, input")) {
+      return;
+    }
+
     const gen = ++this.refreshGen;
     const file = this.app.workspace.getActiveFile();
 
@@ -120,6 +126,10 @@ export class CoEditPanelView extends ItemView {
           text: basename(path),
           attr: { title: path },
         });
+        const summary = this.plugin.pendingSummary(path);
+        if (summary) {
+          row.createSpan({ cls: "live-coedit-excerpt", text: summary });
+        }
         const review = row.createEl("button", { text: "Review" });
         review.addClass("mod-cta");
         review.addEventListener("click", () => this.plugin.openReview(path));
@@ -244,20 +254,35 @@ export class CoEditPanelView extends ItemView {
     }
     log.scrollTop = log.scrollHeight;
 
+    // Liveness: show when the collaborator reports it is actively working.
+    const status = this.plugin.collabStatus;
+    if (
+      status &&
+      status.state === "working" &&
+      Date.now() - status.ts < 180_000
+    ) {
+      const busy = s.createDiv({ cls: "live-coedit-working" });
+      busy.createSpan({ cls: "live-coedit-working-dot" });
+      busy.createSpan({ text: ` ${status.name} is working…` });
+    }
+
     const composer = s.createDiv({ cls: "live-coedit-composer" });
-    const input = composer.createEl("input", {
-      type: "text",
-      placeholder: "Message your collaborator…",
+    const input = composer.createEl("textarea", {
+      placeholder: "Message your collaborator… (Enter sends, Shift+Enter = new line)",
     });
+    input.rows = 2;
     input.value = this.plugin.chatDraft;
     input.addEventListener("input", () => {
       this.plugin.chatDraft = input.value;
     });
     const send = () => {
-      void this.plugin.sendChat(input.value);
+      void this.plugin.sendChat(input.value).then(() => {
+        input.value = "";
+        void this.refresh();
+      });
     };
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         send();
       }
@@ -265,7 +290,7 @@ export class CoEditPanelView extends ItemView {
     const btn = composer.createEl("button", { text: "Send" });
     btn.addClass("mod-cta");
     btn.addEventListener("click", send);
-    // Scroll the chat into view and focus for fast back-and-forth.
+    // Scroll the chat into view for fast back-and-forth.
     window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
   }
 

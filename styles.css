@@ -345,3 +345,39 @@
   padding: 1px 8px;
   margin-left: 6px;
 }
+
+/* Clickable status bar. */
+.live-coedit-statusbar {
+  cursor: pointer;
+}
+
+/* Collaborator liveness indicator. */
+.live-coedit-working {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+
+.live-coedit-working-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--interactive-accent);
+  animation: live-coedit-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes live-coedit-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* Multiline chat composer. */
+.live-coedit-composer textarea {
+  flex: 1;
+  resize: none;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+}
