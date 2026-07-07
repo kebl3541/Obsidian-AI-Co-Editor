@@ -202,6 +202,13 @@ export default class LiveCoEditPlugin extends Plugin {
         );
       })
     );
+
+    // Floating "Ask collaborator" button beside any text selection in a note —
+    // works in reading view too, where there is no editor context menu.
+    this.setupAskButton(activeDocument);
+    this.registerEvent(
+      this.app.workspace.on("window-open", (win) => this.setupAskButton(win.doc))
+    );
     this.addCommand({
       id: "open-panel",
       name: "Open co-edit panel",
@@ -629,26 +636,131 @@ export default class LiveCoEditPlugin extends Plugin {
   // Selection-scoped edit requests: quote the passage into the chat together
   // with its location, so the collaborator edits exactly that spot.
   private askAboutSelection(editor: Editor, view: MarkdownView) {
-    const file = view.file;
     const selection = editor.getSelection();
-    if (!file || !selection.trim()) {
+    if (!view.file || !selection.trim()) {
       new Notice("Select some text first.");
       return;
     }
-    const from = editor.posToOffset(editor.getCursor("from"));
-    const to = editor.posToOffset(editor.getCursor("to"));
+    this.openAskModal(
+      view,
+      selection,
+      editor.posToOffset(editor.getCursor("from")),
+      editor.posToOffset(editor.getCursor("to"))
+    );
+  }
 
+  private openAskModal(
+    view: MarkdownView,
+    selection: string,
+    from?: number,
+    to?: number
+  ) {
+    const file = view.file;
+    if (!file) return;
     new AskModal(this.app, selection, (instruction) => {
       const escaped = selection.replace(/\\/g, "\\\\").replace(/\n/g, "\\n");
       const quoted =
         escaped.length > 400
           ? `${escaped.slice(0, 180)} […] ${escaped.slice(-180)}`
           : escaped;
+      const loc = from !== undefined && to !== undefined ? ` [${from}-${to}]` : "";
       void this.sendChat(
-        `✂️ ${file.path} [${from}-${to}]: «${quoted}» → ${instruction}`
+        `✂️ ${file.path}${loc}: «${quoted}» → ${instruction}`
       );
       new Notice("Sent to your collaborator.");
     }).open();
+  }
+
+  // ---- Floating "Ask collaborator" button -------------------------------------
+
+  private askButtons = new Map<Document, HTMLButtonElement>();
+
+  private setupAskButton(doc: Document) {
+    this.registerDomEvent(doc, "selectionchange", () =>
+      this.updateAskButton(doc)
+    );
+    this.registerDomEvent(doc, "wheel", () => this.hideAskButton(doc), {
+      capture: true,
+      passive: true,
+    });
+  }
+
+  private markdownViewContaining(node: Node): MarkdownView | null {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.containerEl.contains(node)) {
+        return view;
+      }
+    }
+    return null;
+  }
+
+  private getAskButton(doc: Document): HTMLButtonElement {
+    let btn = this.askButtons.get(doc);
+    if (btn) return btn;
+    btn = doc.createElement("button");
+    btn.className = "live-coedit-askbtn";
+    btn.setText("Ask collaborator");
+    // pointerdown + preventDefault keeps the selection alive.
+    btn.addEventListener("pointerdown", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      this.onAskButton(doc);
+    });
+    doc.body.appendChild(btn);
+    this.askButtons.set(doc, btn);
+    return btn;
+  }
+
+  private hideAskButton(doc: Document) {
+    this.askButtons.get(doc)?.removeClass("is-visible");
+  }
+
+  private updateAskButton(doc: Document) {
+    const sel = doc.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      this.hideAskButton(doc);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const view = this.markdownViewContaining(range.startContainer);
+    if (!view || !view.file) {
+      this.hideAskButton(doc);
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      this.hideAskButton(doc);
+      return;
+    }
+    const btn = this.getAskButton(doc);
+    btn.addClass("is-visible");
+    btn.style.top = `${Math.max(8, rect.top - 34)}px`;
+    btn.style.left = `${Math.max(8, rect.left + rect.width / 2 - 60)}px`;
+  }
+
+  private onAskButton(doc: Document) {
+    const sel = doc.getSelection();
+    const text = sel?.toString() ?? "";
+    if (!sel || sel.rangeCount === 0 || !text.trim()) return;
+    const view = this.markdownViewContaining(sel.getRangeAt(0).startContainer);
+    if (!view || !view.file) return;
+
+    let from: number | undefined;
+    let to: number | undefined;
+    if (view.getMode() === "source" && view.editor.somethingSelected()) {
+      from = view.editor.posToOffset(view.editor.getCursor("from"));
+      to = view.editor.posToOffset(view.editor.getCursor("to"));
+    } else {
+      // Reading view: locate the selected passage in the source if possible.
+      const idx = view.editor.getValue().indexOf(text);
+      if (idx >= 0) {
+        from = idx;
+        to = idx + text.length;
+      }
+    }
+    this.hideAskButton(doc);
+    this.openAskModal(view, text, from, to);
   }
 
   private reviewCommand() {

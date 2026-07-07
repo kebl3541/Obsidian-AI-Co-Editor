@@ -314,3 +314,27 @@
   justify-content: flex-end;
   margin-bottom: 2px;
 }
+
+/* Floating "Ask collaborator" button next to a text selection. */
+.live-coedit-askbtn {
+  position: fixed;
+  display: none;
+  z-index: var(--layer-tooltip, 999);
+  padding: 4px 12px;
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  color: var(--text-on-accent);
+  background-color: var(--interactive-accent);
+  border: none;
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+  cursor: pointer;
+}
+
+.live-coedit-askbtn.is-visible {
+  display: block;
+}
+
+.live-coedit-askbtn:hover {
+  background-color: var(--interactive-accent-hover);
+}

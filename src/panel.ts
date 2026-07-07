@@ -220,7 +220,12 @@ export class CoEditPanelView extends ItemView {
     const s = this.section(parent, "message-square", "Chat", msgs.length);
 
     const tools = s.createDiv({ cls: "live-coedit-chattools" });
-    this.iconBtn(tools, "trash-2", "Clear chat history", () => {
+    const clear = tools.createEl("button", {
+      text: "Clear",
+      cls: "live-coedit-smallbtn",
+      attr: { "aria-label": "Clear chat history" },
+    });
+    clear.addEventListener("click", () => {
       void this.plugin.clearChat();
     });
 
