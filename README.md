@@ -50,6 +50,22 @@ The status bar shows the last merge (`Co-edit: merged external edit at …`).
 - **Re-sync active file from disk**: an escape hatch. discard the plugin's local
   state for this file and reload the disk version.
 
+## Working with other AIs (Perplexity example)
+
+The plugin is collaborator agnostic: anything that can edit files in your
+vault can propose changes, and each named collaborator gets its own highlight
+color. A ready made bridge for Perplexity ships in
+[`integrations/perplexity-bridge.py`](integrations/perplexity-bridge.py):
+
+1. Get an API key from Perplexity and put it in your environment
+   (`export PERPLEXITY_API_KEY=...`) or a `.env` file beside the script.
+2. In Obsidian, add "perplexity" under Settings, AI Co-Editor, Collaborators.
+3. Run `python3 integrations/perplexity-bridge.py "/path/to/YourVault"`.
+4. Pick "to: perplexity" in the chat switcher and talk to it.
+
+Several collaborators can work at the same time: address each one from the
+switcher, and review everyone's proposals in the same panel.
+
 ## Limits, honestly
 
 - Merging is line-based: two people editing the *same line* at the same moment
