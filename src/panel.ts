@@ -258,18 +258,47 @@ export class CoEditPanelView extends ItemView {
     window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
   }
 
+  // Collapsible section: click the header to fold/unfold; the collapsed set
+  // persists across restarts.
   private section(
     parent: HTMLElement,
     icon: string,
     title: string,
     count: number
   ): HTMLElement {
+    const settings = this.plugin.settings;
+    const collapsed = settings.collapsedSections.includes(title);
+
     const box = parent.createDiv({ cls: "live-coedit-section" });
-    const head = box.createDiv({ cls: "live-coedit-section-head" });
+    const head = box.createDiv({
+      cls: "live-coedit-section-head live-coedit-clickable",
+    });
+    const chevron = head.createSpan({ cls: "live-coedit-section-icon" });
+    setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
     const ic = head.createSpan({ cls: "live-coedit-section-icon" });
     setIcon(ic, icon);
     head.createSpan({ text: title });
     head.createSpan({ cls: "live-coedit-count", text: String(count) });
-    return box;
+
+    const body = box.createDiv({ cls: "live-coedit-section-body" });
+    if (collapsed) body.hide();
+
+    head.addEventListener("click", () => {
+      const nowCollapsed = !settings.collapsedSections.includes(title);
+      if (nowCollapsed) {
+        settings.collapsedSections.push(title);
+        body.hide();
+        setIcon(chevron, "chevron-right");
+      } else {
+        settings.collapsedSections = settings.collapsedSections.filter(
+          (t) => t !== title
+        );
+        body.show();
+        setIcon(chevron, "chevron-down");
+      }
+      void this.plugin.saveSettings();
+    });
+
+    return body;
   }
 }

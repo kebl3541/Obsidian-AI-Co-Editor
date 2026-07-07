@@ -56,6 +56,7 @@ interface LiveCoEditSettings {
   collaborators: Collaborator[];
   chatPath: string;
   showRestorePoints: boolean;
+  collapsedSections: string[];
 }
 
 const DEFAULT_SETTINGS: LiveCoEditSettings = {
@@ -68,6 +69,7 @@ const DEFAULT_SETTINGS: LiveCoEditSettings = {
   collaborators: [],
   chatPath: "Co-edit chat.md",
   showRestorePoints: false,
+  collapsedSections: ["Activity"],
 };
 
 export interface ChatMessage {
