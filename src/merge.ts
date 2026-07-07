@@ -106,7 +106,9 @@ function replay(base: string[], hunks: Hunk[], s: number, e: number): string[] {
   return out;
 }
 
-const LCS_GUARD = 25_000_000;
+// Cap on the LCS DP table (cells × 4 bytes ≈ 36 MB worst case). Beyond this,
+// merges degrade gracefully instead of spiking memory.
+const LCS_GUARD = 9_000_000;
 
 // Character-level three-way merge of a small region. Returns null when the
 // two sides genuinely overlap at character level too (a true conflict).

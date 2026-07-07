@@ -150,7 +150,9 @@ export default class LiveCoEditPlugin extends Plugin {
       this.app.workspace.on("file-open", (f) => {
         if (f) {
           void this.captureShadow(f);
-          this.restoreHighlights(f);
+          // Give the editor a beat to finish loading the file's content, or
+          // the hash check would wrongly discard stored highlights.
+          window.setTimeout(() => this.restoreHighlights(f), 150);
         }
       })
     );
@@ -253,13 +255,23 @@ export default class LiveCoEditPlugin extends Plugin {
       this.app.workspace.on("layout-change", () => this.addViewActions())
     );
 
+    // Capture shadows for EVERY open markdown view (not just the active one):
+    // a stale or missing shadow is how unsaved text gets lost in a merge.
+    const captureAllOpen = () => {
+      for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+        const view = leaf.view;
+        if (view instanceof MarkdownView && view.file) {
+          void this.captureShadow(view.file);
+        }
+      }
+    };
+    this.registerEvent(this.app.workspace.on("layout-change", captureAllOpen));
+
     this.app.workspace.onLayoutReady(() => {
       this.addViewActions();
+      captureAllOpen();
       const f = this.app.workspace.getActiveFile();
-      if (f) {
-        void this.captureShadow(f);
-        this.restoreHighlights(f);
-      }
+      if (f) this.restoreHighlights(f);
     });
   }
 
@@ -438,10 +450,14 @@ export default class LiveCoEditPlugin extends Plugin {
 
     // The chat and audit notes are plugin infrastructure, not co-edited prose.
     if (af.path === this.settings.chatPath) {
+      this.selfWrites.delete(af.path);
       this.refreshPanel();
       return;
     }
-    if (af.path === this.settings.auditLogPath) return;
+    if (af.path === this.settings.auditLogPath) {
+      this.selfWrites.delete(af.path);
+      return;
+    }
 
     // Our own guarded writes are not external edits.
     if (this.selfWrites.delete(af.path)) {
@@ -454,6 +470,13 @@ export default class LiveCoEditPlugin extends Plugin {
     const editor = this.findEditorFor(af.path);
 
     if (!editor || mode === "off") {
+      // Keep an un-reviewed proposal current with the newest disk content, so
+      // a later approval never resurrects an outdated version.
+      const pend = this.pending.get(af.path);
+      if (pend && editor === null) {
+        pend.theirs = disk;
+        return;
+      }
       this.shadows.set(af.path, disk);
       return;
     }
@@ -573,6 +596,11 @@ export default class LiveCoEditPlugin extends Plugin {
       const buffer = editor.getValue();
       await this.selfModify(f, buffer);
       this.shadows.set(path, buffer);
+    } else if (pend && f instanceof TFile) {
+      // File not open: rejecting must restore the pre-edit content on disk,
+      // otherwise the "rejected" edit silently survives.
+      await this.selfModify(f, pend.base);
+      this.shadows.set(path, pend.base);
     }
     this.dropPending(path);
     this.log(`you rejected the edit from ${pend?.collaborator ?? "collaborator"} in ${path}`);
@@ -580,15 +608,28 @@ export default class LiveCoEditPlugin extends Plugin {
   }
 
   // Accept everything in a pending proposal without opening the dialog.
+  // Conflicting regions (both sides changed the same lines) keep the user's
+  // version — silently discarding the user's typing is never acceptable.
   async acceptAllPending(path: string) {
     const data = this.getReviewData(path);
     if (!data) return;
-    const proposals = data.segments.filter((s) => s.kind === "proposal");
-    const choices = proposals.map((s) =>
-      s.kind === "proposal" ? true : true
+    const proposals = data.segments.filter(
+      (s): s is Extract<Segment, { kind: "proposal" }> => s.kind === "proposal"
     );
+    const choices = proposals.map((p) => !p.conflict);
+    const skipped = choices.filter((c) => !c).length;
     const finalText = composeSegments(data.segments, choices);
-    await this.applyReviewed(path, finalText, choices.length, choices.length);
+    await this.applyReviewed(
+      path,
+      finalText,
+      choices.length - skipped,
+      choices.length
+    );
+    if (skipped > 0) {
+      new Notice(
+        `${skipped} conflicting change(s) kept your version — open Review to compare.`
+      );
+    }
   }
 
   // ---- Chat -------------------------------------------------------------------
@@ -989,6 +1030,9 @@ export default class LiveCoEditPlugin extends Plugin {
 
   private async selfModify(file: TFile, content: string) {
     this.selfWrites.add(file.path);
+    // Failsafe: if the modify event never fires (write error, race), the
+    // guard must not linger and swallow a future genuine external edit.
+    window.setTimeout(() => this.selfWrites.delete(file.path), 3000);
     await this.app.vault.modify(file, content);
   }
 
@@ -1179,6 +1223,17 @@ class ReviewModal extends Modal {
     apply.addEventListener("click", () => {
       const fresh = this.plugin.getReviewData(this.path);
       if (fresh) {
+        const freshProposals = fresh.segments.filter(
+          (s) => s.kind === "proposal"
+        ).length;
+        if (freshProposals !== this.choices.length) {
+          // The note changed while this dialog was open; the checkboxes no
+          // longer line up with the hunks. Re-open on the fresh state.
+          new Notice("The note changed while reviewing — please look again.");
+          this.close();
+          this.plugin.openReview(this.path);
+          return;
+        }
         const finalText = composeSegments(fresh.segments, this.choices);
         const accepted = this.choices.filter(Boolean).length;
         void this.plugin.applyReviewed(this.path, finalText, accepted, this.choices.length);
