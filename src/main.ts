@@ -200,7 +200,16 @@ export default class LiveCoEditPlugin extends Plugin {
       window.setInterval(() => void this.persistAllMarks(), 60_000)
     );
 
+    // A co-edit button in every note's own toolbar (top-right of the pane).
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", () => this.addViewActions())
+    );
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => this.addViewActions())
+    );
+
     this.app.workspace.onLayoutReady(() => {
+      this.addViewActions();
       const f = this.app.workspace.getActiveFile();
       if (f) {
         void this.captureShadow(f);
@@ -735,6 +744,19 @@ export default class LiveCoEditPlugin extends Plugin {
       const pos = editor.offsetToPos(Math.min(offset, editor.getValue().length));
       editor.setCursor(pos);
       editor.scrollIntoView({ from: pos, to: pos }, true);
+    }
+  }
+
+  // Add the "Open co-edit panel" action to each markdown view's own toolbar.
+  private viewsWithAction = new WeakSet<MarkdownView>();
+
+  private addViewActions() {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && !this.viewsWithAction.has(view)) {
+        this.viewsWithAction.add(view);
+        view.addAction("users", "Open co-edit panel", () => void this.openPanel());
+      }
     }
   }
 

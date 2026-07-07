@@ -83,14 +83,56 @@
 }
 
 /* Side panel. */
-.live-coedit-panel .live-coedit-section {
-  margin-bottom: 1.2em;
+.live-coedit-panel .live-coedit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--background-modifier-border);
 }
 
-.live-coedit-panel h5 {
-  margin: 0 0 6px 0;
-  border-bottom: 1px solid var(--background-modifier-border);
-  padding-bottom: 2px;
+.live-coedit-welcome {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2em 1em;
+}
+
+.live-coedit-welcome-icon svg {
+  width: 40px;
+  height: 40px;
+  color: var(--text-faint);
+}
+
+.live-coedit-hint {
+  font-size: var(--font-ui-small);
+  color: var(--text-faint);
+}
+
+.live-coedit-panel .live-coedit-section {
+  margin-bottom: 1.1em;
+}
+
+.live-coedit-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.live-coedit-section-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.live-coedit-count {
+  margin-left: auto;
+  background: var(--background-secondary-alt);
+  border-radius: 10px;
+  padding: 0 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
 }
 
 .live-coedit-row {
@@ -98,8 +140,36 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 3px 0;
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
   font-size: var(--font-ui-small);
+}
+
+.live-coedit-row:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.live-coedit-pending {
+  background-color: rgba(var(--color-yellow-rgb), 0.08);
+}
+
+.live-coedit-file {
+  font-weight: 600;
+  flex: 1;
+}
+
+.live-coedit-lineno {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.live-coedit-excerpt {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-coedit-clickable {
@@ -118,9 +188,34 @@
   font-size: var(--font-ui-smaller);
 }
 
-.live-coedit-empty {
-  color: var(--text-faint);
+.live-coedit-comment-row {
+  padding: 4px 6px;
+  border-left: 3px solid rgba(var(--color-yellow-rgb), 0.6);
+  margin: 4px 0;
+}
+
+.live-coedit-comment-text {
   font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  margin: 2px 0;
+}
+
+.live-coedit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.live-coedit-iconbtn {
+  padding: 2px 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.live-coedit-smallbtn {
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  margin-top: 4px;
 }
 
 .live-coedit-activity {
