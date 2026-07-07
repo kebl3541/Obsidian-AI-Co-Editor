@@ -140,6 +140,15 @@ export default class LiveCoEditPlugin extends Plugin {
   // {"name":"claude","state":"working"|"idle","ts":<ms>} to
   // <configDir>/live-coedit-status.json while they work.
   collabStatus: { name: string; state: string; ts: number } | null = null;
+  private changeQueue: Promise<void> = Promise.resolve();
+  private lastStatusVisible = false;
+
+  // Cache of computed review segments, keyed by content hashes, so panel
+  // refreshes while typing do not recompute an LCS diff every second.
+  private reviewCache = new Map<
+    string,
+    { key: string; data: { segments: Segment[]; buffer: string; collaborator: string } }
+  >();
 
   async onload() {
     await this.loadPersisted();
@@ -160,8 +169,14 @@ export default class LiveCoEditPlugin extends Plugin {
     this.registerView(PANEL_VIEW_TYPE, (leaf) => new CoEditPanelView(leaf, this));
     this.addRibbonIcon("users", "Open co-edit panel", () => void this.openPanel());
 
+    // Serialize disk-change handling: overlapping async merges on rapid
+    // events could otherwise interleave and merge from stale state.
     this.registerEvent(
-      this.app.vault.on("modify", (f) => void this.onDiskChange(f))
+      this.app.vault.on("modify", (f) => {
+        this.changeQueue = this.changeQueue
+          .then(() => this.onDiskChange(f))
+          .catch((e) => console.error("AI Co-Editor: merge failed", e));
+      })
     );
     this.registerEvent(
       this.app.workspace.on("file-open", (f) => {
@@ -593,6 +608,7 @@ export default class LiveCoEditPlugin extends Plugin {
 
   private dropPending(path: string) {
     this.pending.delete(path);
+    this.reviewCache.delete(path);
     this.pendingNotices.get(path)?.hide();
     this.pendingNotices.delete(path);
     if (this.pending.size === 0) this.setStatus("ready");
@@ -610,11 +626,18 @@ export default class LiveCoEditPlugin extends Plugin {
     if (!pend) return null;
     const editor = this.findEditorFor(path);
     const buffer = editor ? editor.getValue() : pend.base;
-    return {
+
+    const key = `${hashStr(buffer)}:${hashStr(pend.theirs)}:${hashStr(pend.base)}`;
+    const cached = this.reviewCache.get(path);
+    if (cached && cached.key === key) return cached.data;
+
+    const data = {
       segments: merge3Segments(pend.base, buffer, pend.theirs).segments,
       buffer,
       collaborator: pend.collaborator,
     };
+    this.reviewCache.set(path, { key, data });
+    return data;
   }
 
   async applyReviewed(path: string, finalText: string, accepted: number, total: number) {
@@ -677,10 +700,15 @@ export default class LiveCoEditPlugin extends Plugin {
         state: parsed.state ?? "idle",
         ts: parsed.ts ?? 0,
       };
+      // Refresh when the VISIBLE state flips, including expiry of a stale
+      // "working" signal from a crashed agent.
+      const visible =
+        next.state === "working" && Date.now() - next.ts < 180_000;
       const changed =
-        this.collabStatus?.state !== next.state ||
+        visible !== this.lastStatusVisible ||
         this.collabStatus?.name !== next.name;
       this.collabStatus = next;
+      this.lastStatusVisible = visible;
       if (changed) this.refreshPanel();
     } catch {
       // unreadable signal file: ignore
@@ -1066,26 +1094,43 @@ export default class LiveCoEditPlugin extends Plugin {
     return scanComments(editor.getValue());
   }
 
-  async dismissComment(path: string, index: number) {
+  // Re-locate a comment at action time: the note may have changed since the
+  // panel rendered, so a stale index could hit the wrong comment.
+  private locateComment(
+    path: string,
+    anchor: { from: number; text: string }
+  ): { editor: Editor; c: CoComment } | null {
     const editor = this.findEditorFor(path);
-    if (!editor) return;
+    if (!editor) return null;
     const comments = scanComments(editor.getValue());
-    const c = comments[index];
-    if (!c) return;
+    const c =
+      comments.find((x) => x.from === anchor.from && x.text === anchor.text) ??
+      comments.find((x) => x.text === anchor.text) ??
+      null;
+    return c ? { editor, c } : null;
+  }
+
+  async dismissComment(path: string, anchor: { from: number; text: string }) {
+    const hit = this.locateComment(path, anchor);
+    if (!hit) {
+      new Notice("That comment is no longer where it was.");
+      return;
+    }
+    const { editor, c } = hit;
     editor.replaceRange("", editor.offsetToPos(c.from), editor.offsetToPos(c.to));
     this.log(`you dismissed a comment from ${c.name} in ${path}`);
   }
 
-  replyToComment(path: string, index: number) {
-    const editor = this.findEditorFor(path);
-    if (!editor) return;
-    const comments = scanComments(editor.getValue());
-    const c = comments[index];
-    if (!c) return;
+  replyToComment(path: string, anchor: { from: number; text: string }) {
     new ReplyModal(this.app, (text) => {
+      const hit = this.locateComment(path, anchor);
+      if (!hit) {
+        new Notice("That comment is no longer where it was.");
+        return;
+      }
       const insert = ` %%${this.settings.userName}: ${text}%%`;
-      editor.replaceRange(insert, editor.offsetToPos(c.to));
-      this.log(`you replied to ${c.name} in ${path}`);
+      hit.editor.replaceRange(insert, hit.editor.offsetToPos(hit.c.to));
+      this.log(`you replied to ${hit.c.name} in ${path}`);
       this.refreshPanel();
     }).open();
   }

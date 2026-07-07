@@ -70,7 +70,11 @@ export class CoEditPanelView extends ItemView {
   async refresh(): Promise<void> {
     // Never rebuild the panel out from under the user's chat draft.
     const active = this.contentEl.ownerDocument.activeElement;
-    if (active && this.contentEl.contains(active) && active.matches("textarea, input")) {
+    if (
+      active &&
+      this.contentEl.contains(active) &&
+      active.matches("textarea, input, select")
+    ) {
       return;
     }
 
@@ -181,7 +185,8 @@ export class CoEditPanelView extends ItemView {
     // --- Comments --------------------------------------------------------------
     if (comments.length > 0 && file) {
       const s = this.section(el, "message-circle", "Comments", comments.length);
-      comments.forEach((c, idx) => {
+      comments.forEach((c) => {
+        const anchor = { from: c.from, text: c.text };
         const row = s.createDiv({ cls: "live-coedit-comment-row" });
         const top = row.createDiv({ cls: "live-coedit-clickable" });
         top.createSpan({ cls: "live-coedit-chip", text: c.name });
@@ -190,10 +195,10 @@ export class CoEditPanelView extends ItemView {
         row.createDiv({ cls: "live-coedit-comment-text", text: c.text });
         const actions = row.createDiv({ cls: "live-coedit-actions" });
         this.iconBtn(actions, "reply", "Reply", () =>
-          this.plugin.replyToComment(file.path, idx)
+          this.plugin.replyToComment(file.path, anchor)
         );
         this.iconBtn(actions, "check", "Dismiss (remove from note)", () => {
-          void this.plugin.dismissComment(file.path, idx).then(() => this.refresh());
+          void this.plugin.dismissComment(file.path, anchor).then(() => this.refresh());
         });
       });
     }

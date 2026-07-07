@@ -163,6 +163,8 @@ class Bridge:
                 self.say("Could not locate the selected passage; it may have changed.")
                 return
             s, e = idx, idx + len(passage)
+        # Use the exact on-disk text (the quoted form may be truncated).
+        passage = content[s:e]
 
         replacement = ask(
             self.key,
@@ -170,24 +172,32 @@ class Bridge:
             "passage, no quotes, no commentary. Never use em dashes.",
             f"Instruction: {instruction}\n\nPassage:\n{content[s:e]}",
         )
-        self.write_verified(path, content[:s] + replacement + content[e:], replacement)
-        self.say(f"Edited {rel}: {instruction}. Waiting in Needs your review.")
+        ok = self.apply_verified(path, passage, replacement)
+        self.say(
+            f"Edited {rel}: {instruction}. Waiting in Needs your review."
+            if ok
+            else f"Could not apply the edit to {rel}; the passage kept changing."
+        )
 
-    def write_verified(self, path: str, new_content: str, marker: str):
-        """Write and confirm the write survived Obsidian's autosave window.
+    def apply_verified(self, path: str, passage: str, replacement: str) -> bool:
+        """Apply a replacement against FRESH file content, then confirm it
+        survived Obsidian's autosave window; retry a few times if not.
 
-        If the editor's autosave overwrites the change within a couple of
-        seconds, re-apply it (the plugin merges it into the open editor).
+        Re-reading before every attempt matters: the human may have typed
+        elsewhere in the file while the API call was in flight, and a stale
+        full-file write would destroy that typing.
         """
-        for _ in range(3):
+        for _ in range(4):
+            content = open(path).read()
+            if replacement in content:
+                return True
+            idx = content.find(passage)
+            if idx < 0:
+                return False  # passage no longer exists; give up gracefully
             with open(path, "w") as f:
-                f.write(new_content)
+                f.write(content[:idx] + replacement + content[idx + len(passage):])
             time.sleep(2.5)
-            if marker in open(path).read():
-                return
-        # last attempt without waiting; plugin-side merge takes it from here
-        with open(path, "w") as f:
-            f.write(new_content)
+        return replacement in open(path).read()
 
     # ---- main loop -------------------------------------------------------------------
 
