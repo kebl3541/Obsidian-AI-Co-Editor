@@ -68,16 +68,16 @@ export class CoEditPanelView extends ItemView {
   // stale refreshes abandon before painting.
   private refreshGen = 0;
 
-  async refresh(): Promise<void> {
-    // Never rebuild the panel out from under the user's chat draft.
+  async refresh(force = false): Promise<void> {
+    // Never rebuild the panel out from under the user's chat draft, unless
+    // the user themself triggered the rebuild (e.g. by sending a message).
     const active = this.contentEl.ownerDocument.activeElement;
-    if (
+    const typing =
       active &&
       this.contentEl.contains(active) &&
-      active.matches("textarea, input, select")
-    ) {
-      return;
-    }
+      active.matches("textarea, input, select");
+    if (typing && !force) return;
+    const restoreFocus = Boolean(typing);
 
     const gen = ++this.refreshGen;
     const file = this.app.workspace.getActiveFile();
@@ -377,7 +377,7 @@ export class CoEditPanelView extends ItemView {
     const send = () => {
       void this.plugin.sendChat(input.value).then(() => {
         input.value = "";
-        void this.refresh();
+        void this.refresh(true);
       });
     };
     input.addEventListener("keydown", (e) => {
@@ -392,6 +392,13 @@ export class CoEditPanelView extends ItemView {
     // Scroll the chat into view for fast back-and-forth.
     if (log) {
       window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
+    }
+    if (restoreFocus) {
+      window.setTimeout(() => {
+        this.contentEl
+          .querySelector<HTMLTextAreaElement>(".live-coedit-composer textarea")
+          ?.focus();
+      }, 0);
     }
   }
 
