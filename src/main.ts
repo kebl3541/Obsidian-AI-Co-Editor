@@ -482,6 +482,12 @@ export default class LiveCoEditPlugin extends Plugin {
       void (async () => {
         for (const [path, prev] of [...this.shadows.entries()]) {
           if (this.pending.has(path)) continue;
+          if (
+            path === this.settings.chatPath ||
+            path === this.settings.auditLogPath ||
+            path === this.chatArchivePath()
+          )
+            continue;
           if (this.modeFor(path) !== "approve") continue;
           const f = this.app.vault.getAbstractFileByPath(path);
           if (!(f instanceof TFile)) continue;
@@ -737,7 +743,10 @@ export default class LiveCoEditPlugin extends Plugin {
       this.refreshPanel();
       return;
     }
-    if (af.path === this.settings.auditLogPath) {
+    if (
+      af.path === this.settings.auditLogPath ||
+      af.path === this.chatArchivePath()
+    ) {
       this.selfWrites.delete(af.path);
       return;
     }
