@@ -1,5 +1,6 @@
 import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
 import { diffWords } from "./merge";
+import type { Segment } from "./merge";
 import type LiveCoEditPlugin from "./main";
 
 export const PANEL_VIEW_TYPE = "live-coedit-panel";
@@ -229,8 +230,8 @@ export class CoEditPanelView extends ItemView {
     const data = this.plugin.getReviewData(path);
     if (!data) return;
     const proposals = data.segments.filter(
-      (s) => s.kind === "proposal"
-    ) as Array<{ kind: "proposal"; mine: string[]; theirs: string[]; conflict: boolean }>;
+      (s): s is Extract<Segment, { kind: "proposal" }> => s.kind === "proposal"
+    );
 
     const MAX_SHOWN = 3;
     const box = parent.createDiv({ cls: "live-coedit-preview" });

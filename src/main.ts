@@ -1437,7 +1437,8 @@ class ReviewModal extends Modal {
       wrap.setAttribute("title", "Click to jump to this spot in the note");
       wrap.addEventListener("click", (evt) => {
         // Don't hijack clicks meant for the checkboxes and radios.
-        if (evt.target instanceof HTMLInputElement) return;
+        const t = evt.target as HTMLElement | null;
+        if (t && t.tagName === "INPUT") return;
         void this.plugin.jumpTo(this.path, hunkOffset);
       });
       const header = wrap.createDiv({ cls: "live-coedit-hunk-head" });
