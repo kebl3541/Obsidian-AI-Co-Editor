@@ -296,7 +296,7 @@ export default class LiveCoEditPlugin extends Plugin {
     });
     this.addCommand({
       id: "ask-edit-selection",
-      name: "Ask AI Co-Editor about the selection",
+      name: "Ask about the selection",
       editorCallback: (editor, view) => {
         if (view instanceof MarkdownView) this.askAboutSelection(editor, view);
       },
@@ -341,7 +341,7 @@ export default class LiveCoEditPlugin extends Plugin {
       if (!btn) return;
       evt.preventDefault();
       evt.stopPropagation();
-      const ghost = btn.closest(".live-coedit-ghost") as HTMLElement | null;
+      const ghost = btn.closest<HTMLElement>(".live-coedit-ghost");
       const path = ghost?.dataset.path;
       const index = Number(ghost?.dataset.index);
       const accept = btn.dataset.accept === "1";
@@ -548,11 +548,13 @@ export default class LiveCoEditPlugin extends Plugin {
       this.highlights = this.settings.rememberHighlights
         ? raw.highlights ?? {}
         : {};
-      for (const [path, pend] of Object.entries(raw.pending ?? {})) {
-        this.pending.set(path, pend);
+      const pendingRec = raw.pending ?? {};
+      for (const path of Object.keys(pendingRec)) {
+        this.pending.set(path, pendingRec[path]);
       }
-      for (const [path, content] of Object.entries(raw.shadows ?? {})) {
-        this.shadows.set(path, content);
+      const shadowRec = raw.shadows ?? {};
+      for (const path of Object.keys(shadowRec)) {
+        this.shadows.set(path, shadowRec[path]);
       }
     } else {
       // v1 data.json stored the settings object directly.
@@ -572,11 +574,15 @@ export default class LiveCoEditPlugin extends Plugin {
     const shadowEntries = [...this.shadows.entries()]
       .filter(([, content]) => content.length <= 200_000)
       .slice(-20);
+    const pendingObj: Record<string, PendingEdit> = {};
+    for (const [k, v] of this.pending) pendingObj[k] = v;
+    const shadowObj: Record<string, string> = {};
+    for (const [k, v] of shadowEntries) shadowObj[k] = v;
     const data: PersistedData = {
       settings: this.settings,
       highlights: this.settings.rememberHighlights ? this.highlights : {},
-      pending: Object.fromEntries(this.pending),
-      shadows: Object.fromEntries(shadowEntries),
+      pending: pendingObj,
+      shadows: shadowObj,
     };
     await this.saveData(data);
   }
@@ -2347,7 +2353,6 @@ class LiveCoEditSettingTab extends PluginSettingTab {
       .addSlider((s) =>
         s
           .setLimits(500, 20000, 500)
-          .setDynamicTooltip()
           .setValue(this.plugin.settings.maxFileKB)
           .onChange(async (v) => {
             this.plugin.settings.maxFileKB = v;
@@ -2401,7 +2406,6 @@ class LiveCoEditSettingTab extends PluginSettingTab {
       .addSlider((s) =>
         s
           .setLimits(1, 50, 1)
-          .setDynamicTooltip()
           .setValue(this.plugin.settings.snapshotLimit)
           .onChange(async (v) => {
             this.plugin.settings.snapshotLimit = v;
@@ -2413,7 +2417,7 @@ class LiveCoEditSettingTab extends PluginSettingTab {
       .setName("Collaborators")
       .setDesc(
         this.plugin.settings.collaborators.length === 0
-          ? "None seen yet. Collaborators identify themselves via .obsidian/live-coedit-collaborator.json and get a color automatically. You can also add one here in advance."
+          ? "None seen yet. Collaborators identify themselves via the collaborator signal file in your vault configuration folder (see the README) and get a color automatically. You can also add one here in advance."
           : this.plugin.settings.collaborators
               .map((c) => `${c.name} (color ${c.slot})`)
               .join(", ")

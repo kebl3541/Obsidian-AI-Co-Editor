@@ -1,8 +1,8 @@
 {
   "id": "live-coedit",
   "name": "AI Co-Editor",
-  "version": "2.18.3",
-  "minAppVersion": "1.4.0",
+  "version": "2.18.4",
+  "minAppVersion": "1.7.2",
   "description": "Co-edit notes live with an AI collaborator: it proposes edits, you review them as track changes and approve, reject, or pick per change. Includes chat, comments, per-word attribution, and snapshots.",
   "author": "kebl3541",
   "authorUrl": "https://github.com/kebl3541",
