@@ -1456,13 +1456,12 @@ export default class LiveCoEditPlugin extends Plugin {
         this.log(`you rejected 1 change from ${pend.collaborator} in ${path}`);
       }
 
-      // Settle the pending state BEFORE any slow I/O, so no refresh tick can
-      // observe a half-resolved proposal.
+      // Settle the pending state BEFORE any slow I/O. Resolving one change
+      // always reduces the count by exactly one; recomputing from content
+      // here is forbidden, because a just-accepted final change makes the
+      // buffer equal the proposal and content inference re-arms it.
       this.reviewCache.delete(path);
-      const fresh = this.getReviewData(path);
-      const remaining = fresh
-        ? fresh.segments.filter((s) => s.kind === "proposal").length
-        : 0;
+      const remaining = proposals.length - 1;
       if (remaining === 0) {
         this.dropPending(path);
         this.setStatus("all changes resolved");
