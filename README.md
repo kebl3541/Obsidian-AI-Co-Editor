@@ -50,21 +50,26 @@ The status bar shows the last merge (`Co-edit: merged external edit at …`).
 - **Re-sync active file from disk**: an escape hatch. discard the plugin's local
   state for this file and reload the disk version.
 
-## Working with other AIs (Perplexity example)
+## Connecting an AI
 
 The plugin is collaborator agnostic: anything that can edit files in your
 vault can propose changes, and each named collaborator gets its own highlight
-color. A ready made bridge for Perplexity ships in
-[`integrations/perplexity-bridge.py`](integrations/perplexity-bridge.py):
+color. Two ready made bridges ship in `integrations/`, each a single Python
+file with no dependencies:
 
-1. Get an API key from Perplexity and put it in your environment
-   (`export PERPLEXITY_API_KEY=...`) or a `.env` file beside the script.
-2. In Obsidian, add "perplexity" under Settings, AI Co-Editor, Collaborators.
-3. Run `python3 integrations/perplexity-bridge.py "/path/to/YourVault"`.
-4. Pick "to: perplexity" in the chat switcher and talk to it.
+**Claude** ([`claude-bridge.py`](integrations/claude-bridge.py)):
+
+1. Get an API key from console.anthropic.com and put it in your environment
+   (`export ANTHROPIC_API_KEY=...`) or a `.env` file beside the script.
+2. In Obsidian, add "claude" under Settings, AI Co-Editor, Collaborators.
+3. Run `python3 integrations/claude-bridge.py "/path/to/YourVault"`.
+
+**Perplexity** ([`perplexity-bridge.py`](integrations/perplexity-bridge.py)):
+same steps with `PERPLEXITY_API_KEY` and the name "perplexity".
 
 Several collaborators can work at the same time: address each one from the
-switcher, and review everyone's proposals in the same panel.
+chat switcher, and review everyone's proposals in the same panel. Tools that
+edit vault files directly (such as Claude Code) need no bridge at all.
 
 ## For integrators
 
