@@ -309,6 +309,38 @@ export default class LiveCoEditPlugin extends Plugin {
       })
     );
 
+    // Ghost buttons: one capture-phase listener per window, immune to the
+    // editor's own event handling.
+    const ghostHandler = (evt: MouseEvent) => {
+      const t = evt.target as HTMLElement | null;
+      const btn = t?.closest?.(".live-coedit-ghost-btn") as HTMLElement | null;
+      if (!btn) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      const ghost = btn.closest(".live-coedit-ghost") as HTMLElement | null;
+      const path = ghost?.dataset.path;
+      const index = Number(ghost?.dataset.index);
+      const accept = btn.dataset.accept === "1";
+      if (!path || !Number.isFinite(index)) {
+        new Notice("AI Co-Editor: this change reference is stale; reopen the note.");
+        return;
+      }
+      void this.resolveProposal(path, index, accept);
+    };
+    this.registerDomEvent(activeDocument, "click", ghostHandler, { capture: true });
+    this.registerDomEvent(activeDocument, "mousedown", (evt) => {
+      const t = evt.target as HTMLElement | null;
+      if (t?.closest?.(".live-coedit-ghost-btn")) {
+        evt.preventDefault();
+        evt.stopPropagation();
+      }
+    }, { capture: true });
+    this.registerEvent(
+      this.app.workspace.on("window-open", (win) => {
+        this.registerDomEvent(win.doc, "click", ghostHandler, { capture: true });
+      })
+    );
+
     // Floating "Ask collaborator" button beside any text selection in a note —
     // works in reading view too, where there is no editor context menu.
     this.setupAskButton(activeDocument);
@@ -1303,11 +1335,7 @@ export default class LiveCoEditPlugin extends Plugin {
     }
 
     view.dispatch({
-      effects: setInlineProposals.of({
-        dels,
-        adds,
-        onResolve: (i, accept) => void this.resolveProposal(path, i, accept),
-      }),
+      effects: setInlineProposals.of({ path, dels, adds }),
     });
   }
 
@@ -1334,10 +1362,26 @@ export default class LiveCoEditPlugin extends Plugin {
     const pend = this.pending.get(path);
     const data = this.getReviewData(path);
     const editor = this.findEditorFor(path);
-    if (!pend || !data || !editor) return;
+    if (!pend || !data || !editor) {
+      console.warn("AI Co-Editor resolve blocked:", {
+        path,
+        hasPending: !!pend,
+        hasData: !!data,
+        hasEditor: !!editor,
+      });
+      new Notice(
+        `AI Co-Editor: could not resolve (${!pend ? "no pending proposal" : !editor ? "note not open in editing view" : "no review data"}).`
+      );
+      return;
+    }
 
     const proposals = data.segments.filter((s) => s.kind === "proposal");
-    if (index < 0 || index >= proposals.length) return;
+    if (index < 0 || index >= proposals.length) {
+      console.warn("AI Co-Editor resolve: stale index", { index, count: proposals.length });
+      new Notice("AI Co-Editor: that change was already resolved; the view will refresh.");
+      this.refreshInlineProposals(path);
+      return;
+    }
 
     this.resolvingPaths.add(path);
     let before = "";

@@ -1,7 +1,6 @@
 // In-document track changes: renders a pending proposal inside the editor.
-// Text the proposal would delete is struck through; text it would insert is
-// shown as green ghost widgets at the exact spot, each with accept/reject
-// buttons. The buffer itself is untouched until the user decides.
+// Buttons carry data attributes and are handled by a document-level capture
+// listener in the plugin, immune to editor event layers and stale closures.
 
 import { StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, WidgetType } from "@codemirror/view";
@@ -19,9 +18,9 @@ export interface InlineDel {
 }
 
 export interface InlineProposalSpec {
+  path: string;
   dels: InlineDel[];
   adds: InlineAdd[];
-  onResolve: (proposalIndex: number, accept: boolean) => void;
 }
 
 export const setInlineProposals = StateEffect.define<InlineProposalSpec>();
@@ -31,40 +30,37 @@ class AddWidget extends WidgetType {
   constructor(
     private text: string,
     private proposalIndex: number,
-    private onResolve: (i: number, accept: boolean) => void
+    private path: string
   ) {
     super();
   }
 
   eq(other: AddWidget): boolean {
-    return other.text === this.text && other.proposalIndex === this.proposalIndex;
+    return (
+      other.text === this.text &&
+      other.proposalIndex === this.proposalIndex &&
+      other.path === this.path
+    );
   }
 
   toDOM(view: EditorView): HTMLElement {
     const doc = view.dom.ownerDocument;
     const span = doc.createElement("span");
     span.className = "live-coedit-ghost";
+    span.dataset.path = this.path;
+    span.dataset.index = String(this.proposalIndex);
     if (this.text.length > 0) {
       const txt = doc.createElement("span");
       txt.className = "live-coedit-ghost-text";
       txt.textContent = this.text;
       span.appendChild(txt);
     }
-
     const mk = (label: string, cls: string, accept: boolean) => {
       const b = doc.createElement("button");
       b.className = `live-coedit-ghost-btn ${cls}`;
       b.textContent = label;
       b.title = accept ? "Accept this change" : "Reject this change";
-      b.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      b.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.onResolve(this.proposalIndex, accept);
-      });
+      b.dataset.accept = accept ? "1" : "0";
       span.appendChild(b);
     };
     mk("✓", "live-coedit-ghost-yes", true);
@@ -73,7 +69,7 @@ class AddWidget extends WidgetType {
   }
 
   ignoreEvent(): boolean {
-    return true; // let our own listeners handle clicks
+    return true; // the plugin's capture listener handles clicks
   }
 }
 
@@ -96,7 +92,7 @@ export const inlineProposalsField = StateField.define<DecorationSet>({
         for (const a of spec.adds) {
           ranges.push(
             Decoration.widget({
-              widget: new AddWidget(a.text, a.proposalIndex, spec.onResolve),
+              widget: new AddWidget(a.text, a.proposalIndex, spec.path),
               side: 1,
             }).range(a.pos)
           );
