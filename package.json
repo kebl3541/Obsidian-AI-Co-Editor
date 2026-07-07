@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild src/merge.ts --format=esm --outfile=test/merge.build.mjs && node test/merge.test.mjs"
+    "test": "esbuild src/merge.ts --format=esm --outfile=test/merge.build.mjs && node test/merge.test.mjs",
+    "deploy": "npm run build && npm test && cp main.js manifest.json styles.css \"/Users/simonaaimar/Desktop/AI SKILL/.obsidian/plugins/live-coedit/\" && echo DEPLOY-OK"
   },
   "keywords": [
     "obsidian",
