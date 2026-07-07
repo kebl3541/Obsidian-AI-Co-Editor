@@ -313,6 +313,15 @@ export default class LiveCoEditPlugin extends Plugin {
       this.app.workspace.on("window-open", (win) => this.setupAskButton(win.doc))
     );
     this.addCommand({
+      id: "file-history",
+      name: "File history (external edits)",
+      callback: () => {
+        const f = this.app.workspace.getActiveFile();
+        if (f) new HistoryModal(this.app, this, f.path).open();
+        else new Notice("Open a markdown file first.");
+      },
+    });
+    this.addCommand({
       id: "open-panel",
       name: "Open co-edit panel",
       callback: () => void this.openPanel(),
@@ -1503,6 +1512,14 @@ export default class LiveCoEditPlugin extends Plugin {
     return this.snapshots.list(path);
   }
 
+  openHistory(path: string) {
+    new HistoryModal(this.app, this, path).open();
+  }
+
+  async snapshotRead(snap: SnapshotInfo): Promise<string> {
+    return this.snapshots.read(snap);
+  }
+
   async restoreSnapshot(path: string, snap: SnapshotInfo) {
     const content = await this.snapshots.read(snap);
     const editor = this.findEditorFor(path);
@@ -1652,6 +1669,85 @@ export default class LiveCoEditPlugin extends Plugin {
     this.shadows.set(file.path, disk);
     this.dropPending(file.path);
     this.setStatus("re-synced from disk");
+  }
+}
+
+// ---- History browser ----------------------------------------------------------
+
+class HistoryModal extends Modal {
+  constructor(
+    app: App,
+    private plugin: LiveCoEditPlugin,
+    private path: string
+  ) {
+    super(app);
+  }
+
+  private renderDiffInto(el: HTMLElement, before: string, after: string) {
+    const box = el.createDiv({ cls: "live-coedit-diff live-coedit-diff-prose" });
+    for (const tok of diffWords(before, after)) {
+      if (tok.kind === "same") {
+        // Collapse long unchanged runs.
+        const words = tok.text.split(/(\s+)/);
+        if (words.filter((w) => w.trim()).length > 14) {
+          box.createSpan({ text: words.slice(0, 8).join("") });
+          box.createSpan({ cls: "live-coedit-skip-inline", text: " ⋯ " });
+          box.createSpan({ text: words.slice(-8).join("") });
+        } else {
+          box.createSpan({ text: tok.text });
+        }
+      } else if (tok.kind === "del") {
+        box.createSpan({ cls: "live-coedit-w-del", text: tok.text });
+      } else {
+        box.createSpan({ cls: "live-coedit-w-add", text: tok.text });
+      }
+    }
+  }
+
+  async onOpen() {
+    this.modalEl.addClass("live-coedit-modal");
+    const name = this.path.split("/").pop() ?? this.path;
+    this.titleEl.setText(`History: ${name}`);
+
+    const snaps = await this.plugin.snapshotList(this.path);
+    if (snaps.length === 0) {
+      this.contentEl.setText("No restore points yet for this file.");
+      return;
+    }
+    const f = this.app.vault.getAbstractFileByPath(this.path);
+    const current = f instanceof TFile ? await this.app.vault.cachedRead(f) : "";
+
+    for (const snap of snaps.slice(0, 10)) {
+      const row = this.contentEl.createDiv({ cls: "live-coedit-row" });
+      row.createSpan({
+        cls: "live-coedit-file",
+        text: new Date(snap.ts).toLocaleString(),
+      });
+      const diffBtn = row.createEl("button", { text: "Diff vs now", cls: "live-coedit-smallbtn" });
+      const restoreBtn = row.createEl("button", { text: "Restore", cls: "live-coedit-smallbtn mod-warning" });
+      const holder = this.contentEl.createDiv();
+      let shown = false;
+      diffBtn.addEventListener("click", () => {
+        if (shown) {
+          holder.empty();
+          shown = false;
+          return;
+        }
+        void this.plugin.snapshotRead(snap).then((content) => {
+          holder.empty();
+          this.renderDiffInto(holder, content, current);
+          shown = true;
+        });
+      });
+      restoreBtn.addEventListener("click", () => {
+        void this.plugin.restoreSnapshot(this.path, snap);
+        this.close();
+      });
+    }
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 
