@@ -47,8 +47,13 @@
 
 .live-coedit-w-del {
   background-color: rgba(var(--color-red-rgb), 0.14);
-  text-decoration: line-through;
-  text-decoration-color: rgba(var(--color-red-rgb), 0.8);
+  background-image: linear-gradient(
+    to top,
+    transparent 45%,
+    rgba(var(--color-red-rgb), 0.8) 45%,
+    rgba(var(--color-red-rgb), 0.8) 58%,
+    transparent 58%
+  );
   opacity: 0.75;
   border-radius: 2px;
 }
@@ -84,7 +89,13 @@
 
 .live-coedit-del {
   background-color: rgba(var(--color-red-rgb), 0.15);
-  text-decoration: line-through;
+  background-image: linear-gradient(
+    to top,
+    transparent 45%,
+    rgba(var(--color-red-rgb), 0.8) 45%,
+    rgba(var(--color-red-rgb), 0.8) 58%,
+    transparent 58%
+  );
   opacity: 0.8;
 }
 
@@ -443,8 +454,13 @@
 /* In-document track changes. */
 .live-coedit-prop-del {
   background-color: rgba(var(--color-red-rgb), 0.14);
-  text-decoration: line-through;
-  text-decoration-color: rgba(var(--color-red-rgb), 0.8);
+  background-image: linear-gradient(
+    to top,
+    transparent 45%,
+    rgba(var(--color-red-rgb), 0.8) 45%,
+    rgba(var(--color-red-rgb), 0.8) 58%,
+    transparent 58%
+  );
 }
 
 .live-coedit-ghost {
