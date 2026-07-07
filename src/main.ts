@@ -180,6 +180,27 @@ export default class LiveCoEditPlugin extends Plugin {
       callback: () => this.reviewCommand(),
     });
     this.addCommand({
+      id: "ask-edit-selection",
+      name: "Ask collaborator to edit selection",
+      editorCallback: (editor, view) => {
+        if (view instanceof MarkdownView) this.askAboutSelection(editor, view);
+      },
+    });
+
+    // Right-click a selection → send it to the collaborator with instructions.
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor, view) => {
+        if (!(view instanceof MarkdownView) || !editor.somethingSelected())
+          return;
+        menu.addItem((item) =>
+          item
+            .setTitle("Ask collaborator to edit this")
+            .setIcon("users")
+            .onClick(() => this.askAboutSelection(editor, view))
+        );
+      })
+    );
+    this.addCommand({
       id: "open-panel",
       name: "Open co-edit panel",
       callback: () => void this.openPanel(),
@@ -593,6 +614,31 @@ export default class LiveCoEditPlugin extends Plugin {
     this.refreshPanel();
   }
 
+  // Selection-scoped edit requests: quote the passage into the chat together
+  // with its location, so the collaborator edits exactly that spot.
+  private askAboutSelection(editor: Editor, view: MarkdownView) {
+    const file = view.file;
+    const selection = editor.getSelection();
+    if (!file || !selection.trim()) {
+      new Notice("Select some text first.");
+      return;
+    }
+    const from = editor.posToOffset(editor.getCursor("from"));
+    const to = editor.posToOffset(editor.getCursor("to"));
+
+    new AskModal(this.app, selection, (instruction) => {
+      const escaped = selection.replace(/\\/g, "\\\\").replace(/\n/g, "\\n");
+      const quoted =
+        escaped.length > 400
+          ? `${escaped.slice(0, 180)} […] ${escaped.slice(-180)}`
+          : escaped;
+      void this.sendChat(
+        `✂️ ${file.path} [${from}-${to}]: «${quoted}» → ${instruction}`
+      );
+      new Notice("Sent to your collaborator.");
+    }).open();
+  }
+
   private reviewCommand() {
     const active = this.app.workspace.getActiveFile();
     const path =
@@ -997,6 +1043,52 @@ class ReviewModal extends Modal {
     });
     const later = buttons.createEl("button", { text: "Decide later" });
     later.addEventListener("click", () => this.close());
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+// ---- Ask-about-selection input --------------------------------------------------
+
+class AskModal extends Modal {
+  private selection: string;
+  private onDone: (instruction: string) => void;
+
+  constructor(app: App, selection: string, onDone: (instruction: string) => void) {
+    super(app);
+    this.selection = selection;
+    this.onDone = onDone;
+  }
+
+  onOpen() {
+    this.titleEl.setText("Ask your collaborator");
+    const preview = this.contentEl.createDiv({ cls: "live-coedit-ask-preview" });
+    preview.setText(
+      this.selection.length > 220
+        ? this.selection.slice(0, 220) + "…"
+        : this.selection
+    );
+    const input = this.contentEl.createEl("input", { type: "text" });
+    input.addClass("live-coedit-reply-input");
+    input.placeholder = "What should change here? e.g. tighten this, make the claim more cautious…";
+    const submit = () => {
+      const v = input.value.trim();
+      if (v) this.onDone(v);
+      this.close();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submit();
+      }
+    });
+    const buttons = this.contentEl.createDiv({ cls: "live-coedit-buttons" });
+    const ok = buttons.createEl("button", { text: "Send" });
+    ok.addClass("mod-cta");
+    ok.addEventListener("click", submit);
+    window.setTimeout(() => input.focus(), 0);
   }
 
   onClose() {

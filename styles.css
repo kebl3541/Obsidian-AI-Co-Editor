@@ -297,3 +297,13 @@
 .live-coedit-composer input {
   flex: 1;
 }
+
+/* Ask-about-selection preview. */
+.live-coedit-ask-preview {
+  border-left: 3px solid var(--interactive-accent);
+  padding: 4px 8px;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: pre-wrap;
+}
