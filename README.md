@@ -4,14 +4,19 @@
 [![GitHub stars](https://img.shields.io/github/stars/kebl3541/Obsidian-Live-CoEdit?style=flat&logo=github&label=Stars)](https://github.com/kebl3541/Obsidian-Live-CoEdit/stargazers)
 [![Latest release](https://img.shields.io/github/v/release/kebl3541/Obsidian-Live-CoEdit?style=flat&label=Release)](https://github.com/kebl3541/Obsidian-Live-CoEdit/releases/latest)
 
+<p align="center">If this plugin adds value for you and you would like to help support
+continued development, please use the buttons below:</p>
+
+<p align="center">
+<a href="https://www.paypal.com/donate/?business=berlin.philosophy%40gmail.com&no_recurring=0&currency_code=EUR"><img src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-200px.png" alt="PayPal" height="42"></a>
+&nbsp;&nbsp;
+<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="52"></a>
+</p>
+
+
 Co-edit the **same open note simultaneously** with an external collaborator —
 an AI assistant (Claude Code, etc.), a script, or another editor — without
 anyone's words getting lost.
-
-If you enjoy using this plugin, don't forget to ⭐ star the repository to show
-your support!
-
-<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png" alt="Buy me a coffee" height="42"></a>
 
 ## The problem it solves
 
@@ -61,10 +66,13 @@ The status bar shows the last merge (`Co-edit: merged external edit at …`).
 
 ## Support
 
-If this plugin is useful to you, you can support its development:
+If this plugin adds value for you and you would like to help support continued
+development, please use the buttons below:
 
-<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png" alt="Buy me a coffee" height="42"></a>
-<a href="https://www.paypal.com/donate/?business=berlin.philosophy%40gmail.com&no_recurring=0&currency_code=EUR"><img src="https://img.shields.io/badge/PayPal-Donate-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal" height="42"></a>
+<a href="https://www.paypal.com/donate/?business=berlin.philosophy%40gmail.com&no_recurring=0&currency_code=EUR"><img src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-200px.png" alt="PayPal" height="42"></a>
+&nbsp;&nbsp;
+<a href="https://buymeacoffee.com/philosophizer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy me a coffee" height="52"></a>
+
 
 ## License
 
