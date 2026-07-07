@@ -79,6 +79,12 @@ merged at word level; conflicts keep your version; proposals wait for your
 decision whether the note is open, closed, or Obsidian was not even running
 when the edit happened; and every applied change has a snapshot behind it.
 
+Two behaviors worth knowing about, both local to your machine: the plugin
+lists your markdown files once at startup to remember a baseline for recent
+notes, which is how edits made while Obsidian was closed still become
+reviewable proposals; and it never makes network requests. Nothing leaves
+your vault.
+
 ## Connecting other AIs
 
 **Perplexity** ([`perplexity-bridge.py`](integrations/perplexity-bridge.py)):
