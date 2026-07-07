@@ -566,7 +566,7 @@ export default class LiveCoEditPlugin extends Plugin {
   // ---- Core flow ---------------------------------------------------------------
 
   private setStatus(text: string) {
-    this.statusEl?.setText(`Co-edit: ${text}`);
+    this.statusEl?.setText(`Co-edit ${this.manifest.version}: ${text}`);
   }
 
   private log(entry: string) {
@@ -1105,9 +1105,17 @@ export default class LiveCoEditPlugin extends Plugin {
 
   private onAskButton(doc: Document) {
     const sel = doc.getSelection();
-    const text = sel?.toString() ?? "";
-    if (!sel || sel.rangeCount === 0 || !text.trim()) return;
-    const view = this.markdownViewContaining(sel.getRangeAt(0).startContainer);
+    if (!sel || sel.rangeCount === 0) return;
+    // Extract the text from the DOM range itself: Selection.toString() can be
+    // patched by other plugins and once returned an object here.
+    const range0 = sel.getRangeAt(0);
+    let text = range0.cloneContents().textContent ?? "";
+    if (!text.trim()) {
+      const fallback = sel.toString();
+      text = typeof fallback === "string" ? fallback : "";
+    }
+    if (!text.trim()) return;
+    const view = this.markdownViewContaining(range0.startContainer);
     if (!view || !view.file) return;
 
     let from: number | undefined;
