@@ -104,20 +104,14 @@ export class CoEditPanelView extends ItemView {
     this.iconBtn(header, "refresh-cw", "Refresh", () => void this.refresh());
 
     // Chat lives at the top: it is the steering wheel of the collaboration.
+    // When nothing else is happening the panel is simply quiet below it.
     this.renderChat(el, msgs);
-
-    // Friendly empty state when nothing else is happening.
     if (
       pendingPaths.length === 0 &&
       marks.length === 0 &&
       comments.length === 0 &&
       snaps.length === 0
     ) {
-      const empty = el.createDiv({ cls: "live-coedit-welcome" });
-      empty.createEl("p", {
-        cls: "live-coedit-hint",
-        text: "When your collaborator edits an open note, proposals to review, their highlighted changes, and comments show up here.",
-      });
       return;
     }
 

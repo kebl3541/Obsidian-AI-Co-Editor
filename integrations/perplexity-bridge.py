@@ -203,7 +203,7 @@ class Bridge:
 
     def run(self):
         print(f"Perplexity bridge watching {self.chat_path}")
-        self.say("perplexity connected. Address me with the chat switcher.")
+        # No greeting in the chat: the panel is the user's workspace, not ours.
         while True:
             for msg in self.new_messages():
                 print("->", msg[:80])
