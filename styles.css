@@ -439,3 +439,35 @@
   height: auto;
   padding: 0 14px;
 }
+
+/* In-document track changes. */
+.live-coedit-prop-del {
+  background-color: rgba(var(--color-red-rgb), 0.14);
+  text-decoration: line-through;
+  text-decoration-color: rgba(var(--color-red-rgb), 0.8);
+}
+
+.live-coedit-ghost {
+  background-color: rgba(var(--color-green-rgb), 0.18);
+  border-radius: 3px;
+  padding: 0 2px;
+  white-space: pre-wrap;
+}
+
+.live-coedit-ghost-btn {
+  font-size: 0.7em;
+  padding: 0 4px;
+  margin-left: 2px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.live-coedit-ghost-yes {
+  background-color: rgba(var(--color-green-rgb), 0.5);
+}
+
+.live-coedit-ghost-no {
+  background-color: rgba(var(--color-red-rgb), 0.4);
+}

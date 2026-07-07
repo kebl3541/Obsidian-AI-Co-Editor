@@ -29,6 +29,13 @@ import {
   externalMarksField,
   readMarks,
 } from "./marks";
+import {
+  clearInlineProposals,
+  inlineProposalsField,
+  setInlineProposals,
+  InlineAdd,
+  InlineDel,
+} from "./inline";
 import { SnapshotStore, SnapshotInfo } from "./snapshots";
 import { CoComment, scanComments } from "./comments";
 import { CoEditPanelView, PANEL_VIEW_TYPE } from "./panel";
@@ -64,6 +71,8 @@ interface LiveCoEditSettings {
   // Largest file (in KB) the merge engine will handle; bigger files fall
   // back to Obsidian's default behavior.
   maxFileKB: number;
+  // Render pending proposals inside the note as track changes.
+  inlineProposals: boolean;
   // Keep collaborator highlights across restarts. Off by default: closing
   // Obsidian starts a clean page.
   rememberHighlights: boolean;
@@ -87,6 +96,7 @@ const DEFAULT_SETTINGS: LiveCoEditSettings = {
   activeCollaborator: "everyone",
   maxFileKB: DEFAULT_MAX_FILE_KB,
   rememberHighlights: false,
+  inlineProposals: true,
 };
 
 export interface ChatMessage {
@@ -172,7 +182,11 @@ export default class LiveCoEditPlugin extends Plugin {
     this.statusEl.addEventListener("click", () => void this.openPanel());
     this.setStatus("ready");
 
-    this.registerEditorExtension([externalMarksField, commentHighlighter]);
+    this.registerEditorExtension([
+      externalMarksField,
+      commentHighlighter,
+      inlineProposalsField,
+    ]);
     this.registerView(PANEL_VIEW_TYPE, (leaf) => new CoEditPanelView(leaf, this));
     this.addRibbonIcon("users", "Open co-edit panel", () => void this.openPanel());
 
@@ -191,7 +205,10 @@ export default class LiveCoEditPlugin extends Plugin {
           void this.captureShadow(f);
           // Give the editor a beat to finish loading the file's content, or
           // the hash check would wrongly discard stored highlights.
-          window.setTimeout(() => this.restoreHighlights(f), 150);
+          window.setTimeout(() => {
+            this.restoreHighlights(f);
+            this.refreshInlineProposals(f.path);
+          }, 150);
         }
       })
     );
@@ -339,7 +356,11 @@ export default class LiveCoEditPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on("editor-change", () => {
         if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => this.refreshPanel(), 900);
+        refreshTimer = window.setTimeout(() => {
+          this.refreshPanel();
+          const f = this.app.workspace.getActiveFile();
+          if (f) this.refreshInlineProposals(f.path);
+        }, 900);
       })
     );
 
@@ -599,6 +620,7 @@ export default class LiveCoEditPlugin extends Plugin {
       this.pending.set(af.path, { theirs: disk, base, collaborator: who });
       void this.saveSettings();
       this.announcePending(af.path, who);
+      this.refreshInlineProposals(af.path);
       this.log(`${who} proposed an edit to ${af.path}`);
       return;
     }
@@ -649,6 +671,7 @@ export default class LiveCoEditPlugin extends Plugin {
     this.pending.delete(path);
     this.reviewCache.delete(path);
     void this.saveSettings();
+    this.refreshInlineProposals(path);
     this.pendingNotices.get(path)?.hide();
     this.pendingNotices.delete(path);
     if (this.pending.size === 0) this.setStatus("ready");
@@ -1042,6 +1065,122 @@ export default class LiveCoEditPlugin extends Plugin {
       return;
     }
     this.openReview(path);
+  }
+
+  // ---- In-document track changes -----------------------------------------------
+
+  // Paint the pending proposal into the editor: struck deletions, green ghost
+  // insertions, each with accept/reject buttons.
+  refreshInlineProposals(path: string) {
+    const editor = this.findEditorFor(path);
+    const view = editor ? this.editorView(editor) : null;
+    if (!editor || !view) return;
+
+    const data = this.settings.inlineProposals ? this.getReviewData(path) : null;
+    if (!data) {
+      view.dispatch({ effects: clearInlineProposals.of(null) });
+      return;
+    }
+
+    const dels: InlineDel[] = [];
+    const adds: InlineAdd[] = [];
+    let bufferOffset = 0;
+    let idx = 0;
+    for (const seg of data.segments) {
+      if (seg.kind === "plain") {
+        for (const l of seg.lines) bufferOffset += l.length + 1;
+        continue;
+      }
+      const mineText = seg.mine.join("\n");
+      const theirsText = seg.theirs.join("\n");
+      let off = bufferOffset;
+      for (const tok of diffWords(mineText, theirsText)) {
+        if (tok.kind === "same") {
+          off += tok.text.length;
+        } else if (tok.kind === "del") {
+          dels.push({ from: off, to: off + tok.text.length, proposalIndex: idx });
+          off += tok.text.length;
+        } else {
+          adds.push({ pos: off, text: tok.text, proposalIndex: idx });
+        }
+      }
+      bufferOffset += mineText.length + 1;
+      idx++;
+    }
+
+    view.dispatch({
+      effects: setInlineProposals.of({
+        dels,
+        adds,
+        onResolve: (i, accept) => void this.resolveProposal(path, i, accept),
+      }),
+    });
+  }
+
+  // Accept or reject ONE change from a pending proposal, in place.
+  async resolveProposal(path: string, index: number, accept: boolean) {
+    const pend = this.pending.get(path);
+    const data = this.getReviewData(path);
+    const editor = this.findEditorFor(path);
+    if (!pend || !data || !editor) return;
+
+    const proposals = data.segments.filter((s) => s.kind === "proposal");
+    if (index < 0 || index >= proposals.length) return;
+
+    if (accept) {
+      // Apply just this hunk to the buffer; the recomputation then treats it
+      // as agreed text and the remaining hunks stay pending.
+      let bufferOffset = 0;
+      let idx = 0;
+      for (const seg of data.segments) {
+        if (seg.kind === "plain") {
+          for (const l of seg.lines) bufferOffset += l.length + 1;
+          continue;
+        }
+        const mineText = seg.mine.join("\n");
+        if (idx === index) {
+          const before = editor.getValue();
+          await this.snapshots.save(path, before);
+          const theirsText = seg.theirs.join("\n");
+          editor.replaceRange(
+            theirsText,
+            editor.offsetToPos(bufferOffset),
+            editor.offsetToPos(bufferOffset + mineText.length)
+          );
+          this.markExternalChanges(
+            editor,
+            before,
+            editor.getValue(),
+            this.slotFor(pend.collaborator)
+          );
+          await this.appendAudit(pend.collaborator, path, before, editor.getValue());
+          this.log(`you accepted 1 change from ${pend.collaborator} in ${path}`);
+          break;
+        }
+        bufferOffset += mineText.length + 1;
+        idx++;
+      }
+    } else {
+      // Fold this hunk back to the user's version inside the proposal.
+      const choices = proposals.map((_, k) => k !== index);
+      pend.theirs = composeSegments(data.segments, choices);
+      this.log(`you rejected 1 change from ${pend.collaborator} in ${path}`);
+    }
+
+    this.reviewCache.delete(path);
+    // If nothing is left to review, the proposal is settled.
+    const fresh = this.getReviewData(path);
+    const remaining = fresh
+      ? fresh.segments.filter((s) => s.kind === "proposal").length
+      : 0;
+    if (remaining === 0) {
+      this.dropPending(path);
+      this.setStatus("all changes resolved");
+    } else {
+      void this.saveSettings();
+      this.refreshInlineProposals(path);
+    }
+    this.refreshPanel();
   }
 
   // ---- Highlights -------------------------------------------------------------
@@ -1753,6 +1892,20 @@ class LiveCoEditSettingTab extends PluginSettingTab {
             this.plugin.settings.maxFileKB = v;
             await this.plugin.saveSettings();
           })
+      );
+
+    new Setting(containerEl)
+      .setName("Show proposed changes in the note")
+      .setDesc(
+        "Pending proposals render as track changes inside the note: struck deletions and green insertions with accept and reject buttons. Off: proposals only appear in the panel and review dialog."
+      )
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.inlineProposals).onChange(async (v) => {
+          this.plugin.settings.inlineProposals = v;
+          await this.plugin.saveSettings();
+          const f = this.plugin.app.workspace.getActiveFile();
+          if (f) this.plugin.refreshInlineProposals(f.path);
+        })
       );
 
     new Setting(containerEl)
