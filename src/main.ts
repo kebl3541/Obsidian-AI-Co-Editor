@@ -63,6 +63,9 @@ interface LiveCoEditSettings {
   // Largest file (in KB) the merge engine will handle; bigger files fall
   // back to Obsidian's default behavior.
   maxFileKB: number;
+  // Keep collaborator highlights across restarts. Off by default: closing
+  // Obsidian starts a clean page.
+  rememberHighlights: boolean;
   // Which collaborator chat messages and requests are addressed to.
   // "everyone" broadcasts; a name targets that agent only.
   activeCollaborator: string;
@@ -82,6 +85,7 @@ const DEFAULT_SETTINGS: LiveCoEditSettings = {
   askButtonMode: "reading",
   activeCollaborator: "everyone",
   maxFileKB: DEFAULT_MAX_FILE_KB,
+  rememberHighlights: false,
 };
 
 export interface ChatMessage {
@@ -105,6 +109,7 @@ interface PersistedHighlights {
 interface PersistedData {
   settings: LiveCoEditSettings;
   highlights: Record<string, PersistedHighlights>;
+  pending?: Record<string, PendingEdit>;
 }
 
 export interface MarkListing {
@@ -359,6 +364,9 @@ export default class LiveCoEditPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.addViewActions();
       captureAllOpen();
+      for (const [path, pend] of this.pending) {
+        this.announcePending(path, pend.collaborator);
+      }
       const f = this.app.workspace.getActiveFile();
       if (f) this.restoreHighlights(f);
     });
@@ -378,7 +386,12 @@ export default class LiveCoEditPlugin extends Plugin {
     const raw = (await this.loadData()) as Partial<PersistedData> | null;
     if (raw && typeof raw === "object" && "settings" in raw) {
       this.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings);
-      this.highlights = raw.highlights ?? {};
+      this.highlights = this.settings.rememberHighlights
+        ? raw.highlights ?? {}
+        : {};
+      for (const [path, pend] of Object.entries(raw.pending ?? {})) {
+        this.pending.set(path, pend);
+      }
     } else {
       // v1 data.json stored the settings object directly.
       this.settings = Object.assign(
@@ -394,7 +407,8 @@ export default class LiveCoEditPlugin extends Plugin {
     this.snapshots?.setLimit(this.settings.snapshotLimit);
     const data: PersistedData = {
       settings: this.settings,
-      highlights: this.highlights,
+      highlights: this.settings.rememberHighlights ? this.highlights : {},
+      pending: Object.fromEntries(this.pending),
     };
     await this.saveData(data);
   }
@@ -581,6 +595,7 @@ export default class LiveCoEditPlugin extends Plugin {
 
     if (mode === "approve") {
       this.pending.set(af.path, { theirs: disk, base, collaborator: who });
+      void this.saveSettings();
       this.announcePending(af.path, who);
       this.log(`${who} proposed an edit to ${af.path}`);
       return;
@@ -631,6 +646,7 @@ export default class LiveCoEditPlugin extends Plugin {
   private dropPending(path: string) {
     this.pending.delete(path);
     this.reviewCache.delete(path);
+    void this.saveSettings();
     this.pendingNotices.get(path)?.hide();
     this.pendingNotices.delete(path);
     if (this.pending.size === 0) this.setStatus("ready");
@@ -647,7 +663,11 @@ export default class LiveCoEditPlugin extends Plugin {
     const pend = this.pending.get(path);
     if (!pend) return null;
     const editor = this.findEditorFor(path);
-    const buffer = editor ? editor.getValue() : pend.base;
+    let buffer = editor ? editor.getValue() : pend.base;
+    // After a restart the buffer may already hold the proposed text (the
+    // proposal was written to disk before quitting). Review against the base,
+    // or the diff would appear empty and approval meaningless.
+    if (buffer === pend.theirs) buffer = pend.base;
 
     const key = `${hashStr(buffer)}:${hashStr(pend.theirs)}:${hashStr(pend.base)}`;
     const cached = this.reviewCache.get(path);
@@ -1708,6 +1728,20 @@ class LiveCoEditSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.maxFileKB)
           .onChange(async (v) => {
             this.plugin.settings.maxFileKB = v;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Remember highlights after closing Obsidian")
+      .setDesc(
+        "Off: collaborator highlights reset when you close Obsidian. On: they come back where they were."
+      )
+      .addToggle((t) =>
+        t
+          .setValue(this.plugin.settings.rememberHighlights)
+          .onChange(async (v) => {
+            this.plugin.settings.rememberHighlights = v;
             await this.plugin.saveSettings();
           })
       );
