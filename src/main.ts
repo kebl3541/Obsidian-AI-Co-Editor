@@ -32,7 +32,7 @@ import { SnapshotStore, SnapshotInfo } from "./snapshots";
 import { CoComment, scanComments } from "./comments";
 import { CoEditPanelView, PANEL_VIEW_TYPE } from "./panel";
 
-const MAX_FILE_SIZE = 2_000_000; // bytes; larger files are left to Obsidian
+const DEFAULT_MAX_FILE_KB = 2000; // larger files are left to Obsidian
 
 type ApplyMode = "auto" | "approve" | "off";
 
@@ -60,6 +60,9 @@ interface LiveCoEditSettings {
   // Where the floating "Ask collaborator" button may appear. In editing mode
   // the right-click menu covers the feature, so "reading" is the default.
   askButtonMode: "off" | "reading" | "always";
+  // Largest file (in KB) the merge engine will handle; bigger files fall
+  // back to Obsidian's default behavior.
+  maxFileKB: number;
   // Which collaborator chat messages and requests are addressed to.
   // "everyone" broadcasts; a name targets that agent only.
   activeCollaborator: string;
@@ -78,6 +81,7 @@ const DEFAULT_SETTINGS: LiveCoEditSettings = {
   collapsedSections: ["Activity"],
   askButtonMode: "reading",
   activeCollaborator: "everyone",
+  maxFileKB: DEFAULT_MAX_FILE_KB,
 };
 
 export interface ChatMessage {
@@ -472,7 +476,7 @@ export default class LiveCoEditPlugin extends Plugin {
   }
 
   private async captureShadow(file: TFile) {
-    if (file.extension !== "md" || file.stat.size > MAX_FILE_SIZE) return;
+    if (file.extension !== "md" || file.stat.size > this.maxFileBytes()) return;
     if (!this.shadows.has(file.path)) {
       this.shadows.set(file.path, await this.app.vault.cachedRead(file));
     }
@@ -494,7 +498,7 @@ export default class LiveCoEditPlugin extends Plugin {
 
   private async onDiskChange(af: TAbstractFile) {
     if (!(af instanceof TFile) || af.extension !== "md") return;
-    if (af.stat.size > MAX_FILE_SIZE) return;
+    if (af.stat.size > this.maxFileBytes()) return;
 
     // The chat and audit notes are plugin infrastructure, not co-edited prose.
     if (af.path === this.settings.chatPath) {
@@ -653,6 +657,10 @@ export default class LiveCoEditPlugin extends Plugin {
     this.dropPending(path);
     this.log(`you rejected the edit from ${pend?.collaborator ?? "collaborator"} in ${path}`);
     this.setStatus(`rejected external edit at ${new Date().toLocaleTimeString()}`);
+  }
+
+  private maxFileBytes(): number {
+    return (this.settings.maxFileKB || DEFAULT_MAX_FILE_KB) * 1000;
   }
 
   private async pollCollabStatus() {
@@ -1572,6 +1580,22 @@ class LiveCoEditSettingTab extends PluginSettingTab {
           this.plugin.settings.showRestorePoints = v;
           await this.plugin.saveSettings();
         })
+      );
+
+    new Setting(containerEl)
+      .setName("Largest file to merge (KB)")
+      .setDesc(
+        "Files bigger than this are left to Obsidian's default handling. Raise it if you co-edit very long manuscripts."
+      )
+      .addSlider((s) =>
+        s
+          .setLimits(500, 20000, 500)
+          .setDynamicTooltip()
+          .setValue(this.plugin.settings.maxFileKB)
+          .onChange(async (v) => {
+            this.plugin.settings.maxFileKB = v;
+            await this.plugin.saveSettings();
+          })
       );
 
     new Setting(containerEl)

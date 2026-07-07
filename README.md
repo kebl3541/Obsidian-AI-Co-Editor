@@ -66,14 +66,18 @@ color. A ready made bridge for Perplexity ships in
 Several collaborators can work at the same time: address each one from the
 switcher, and review everyone's proposals in the same panel.
 
-## Limits, honestly
+## For integrators
 
-- Merging is line-based: two people editing the *same line* at the same moment
-  is a conflict (your side wins) rather than a character-level merge.
-- There is a small race window (~2 s) where Obsidian's autosave can land
-  between an external write and the merge; external tools should re-read the
-  file after writing if they need certainty.
-- Files over 2 MB are left to Obsidian's default behavior.
+Any tool that edits vault files can collaborate. To be a first class citizen:
+
+1. Write `{"name":"yourtool"}` to `.obsidian/live-coedit-collaborator.json`
+   just before each edit, so changes get your color and attribution.
+2. Optionally write `{"name":"yourtool","state":"working","ts":<ms>}` to
+   `.obsidian/live-coedit-status.json` while working, and set it back to
+   `"idle"` when done, to drive the liveness indicator.
+3. After writing a file, re-read it a moment later and re-apply if your change
+   is missing: Obsidian's autosave can occasionally win a very close race. The
+   bundled Perplexity bridge shows the pattern in `write_verified`.
 
 ## Install (manual)
 

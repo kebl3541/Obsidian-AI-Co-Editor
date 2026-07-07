@@ -170,9 +170,24 @@ class Bridge:
             "passage, no quotes, no commentary. Never use em dashes.",
             f"Instruction: {instruction}\n\nPassage:\n{content[s:e]}",
         )
-        with open(path, "w") as f:
-            f.write(content[:s] + replacement + content[e:])
+        self.write_verified(path, content[:s] + replacement + content[e:], replacement)
         self.say(f"Edited {rel}: {instruction}. Waiting in Needs your review.")
+
+    def write_verified(self, path: str, new_content: str, marker: str):
+        """Write and confirm the write survived Obsidian's autosave window.
+
+        If the editor's autosave overwrites the change within a couple of
+        seconds, re-apply it (the plugin merges it into the open editor).
+        """
+        for _ in range(3):
+            with open(path, "w") as f:
+                f.write(new_content)
+            time.sleep(2.5)
+            if marker in open(path).read():
+                return
+        # last attempt without waiting; plugin-side merge takes it from here
+        with open(path, "w") as f:
+            f.write(new_content)
 
     # ---- main loop -------------------------------------------------------------------
 
