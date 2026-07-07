@@ -430,12 +430,12 @@
   border-color: var(--interactive-accent);
 }
 
-/* Composer alignment: Send hugs the bottom of the text box. */
+/* Composer alignment: Send matches the text box height exactly. */
 .live-coedit-composer {
-  align-items: flex-end;
+  align-items: stretch;
 }
 
 .live-coedit-composer button {
   height: auto;
-  padding: 6px 14px;
+  padding: 0 14px;
 }
