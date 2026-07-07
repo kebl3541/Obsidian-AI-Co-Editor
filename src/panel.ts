@@ -80,7 +80,7 @@ export class CoEditPanelView extends ItemView {
     const comments = file ? this.plugin.commentsInFile(file.path) : [];
     const snaps = file ? await this.plugin.snapshotList(file.path) : [];
 
-    // Friendly empty state when nothing is happening.
+    // Friendly empty state when nothing is happening (chat still shows below).
     if (
       pendingPaths.length === 0 &&
       marks.length === 0 &&
@@ -97,6 +97,7 @@ export class CoEditPanelView extends ItemView {
         cls: "live-coedit-hint",
         text: "When your collaborator edits an open note, proposals to review, their highlighted changes, comments, and restore points all show up here.",
       });
+      await this.renderChat(el);
       return;
     }
 
@@ -110,9 +111,23 @@ export class CoEditPanelView extends ItemView {
           text: basename(path),
           attr: { title: path },
         });
-        const btn = row.createEl("button", { text: "Review" });
-        btn.addClass("mod-cta");
-        btn.addEventListener("click", () => this.plugin.openReview(path));
+        const review = row.createEl("button", { text: "Review" });
+        review.addClass("mod-cta");
+        review.addEventListener("click", () => this.plugin.openReview(path));
+        const accept = row.createEl("button", {
+          text: "Accept all",
+          cls: "live-coedit-smallbtn",
+        });
+        accept.addEventListener("click", () => {
+          void this.plugin.acceptAllPending(path).then(() => this.refresh());
+        });
+        const reject = row.createEl("button", {
+          text: "Reject",
+          cls: "live-coedit-smallbtn mod-warning",
+        });
+        reject.addEventListener("click", () => {
+          void this.plugin.rejectPending(path).then(() => this.refresh());
+        });
       }
     }
 
@@ -186,6 +201,47 @@ export class CoEditPanelView extends ItemView {
         s.createDiv({ cls: "live-coedit-activity", text: entry });
       }
     }
+
+    await this.renderChat(el);
+  }
+
+  // Chat with the collaborator, backed by the chat note.
+  private async renderChat(parent: HTMLElement) {
+    const msgs = await this.plugin.chatMessages();
+    const s = this.section(parent, "message-square", "Chat", msgs.length);
+
+    const log = s.createDiv({ cls: "live-coedit-chatlog" });
+    for (const m of msgs) {
+      const row = log.createDiv({ cls: "live-coedit-chatmsg" });
+      row.createSpan({ cls: "live-coedit-chip", text: m.name });
+      row.createSpan({ cls: "live-coedit-lineno", text: ` ${m.time}` });
+      row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+    }
+    log.scrollTop = log.scrollHeight;
+
+    const composer = s.createDiv({ cls: "live-coedit-composer" });
+    const input = composer.createEl("input", {
+      type: "text",
+      placeholder: "Message your collaborator…",
+    });
+    input.value = this.plugin.chatDraft;
+    input.addEventListener("input", () => {
+      this.plugin.chatDraft = input.value;
+    });
+    const send = () => {
+      void this.plugin.sendChat(input.value);
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        send();
+      }
+    });
+    const btn = composer.createEl("button", { text: "Send" });
+    btn.addClass("mod-cta");
+    btn.addEventListener("click", send);
+    // Scroll the chat into view and focus for fast back-and-forth.
+    window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
   }
 
   private section(

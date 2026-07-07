@@ -54,6 +54,7 @@ interface LiveCoEditSettings {
   snapshotLimit: number;
   userName: string;
   collaborators: Collaborator[];
+  chatPath: string;
 }
 
 const DEFAULT_SETTINGS: LiveCoEditSettings = {
@@ -64,7 +65,14 @@ const DEFAULT_SETTINGS: LiveCoEditSettings = {
   snapshotLimit: 10,
   userName: "me",
   collaborators: [],
+  chatPath: "Co-edit chat.md",
 };
+
+export interface ChatMessage {
+  name: string;
+  time: string;
+  text: string;
+}
 
 interface PendingEdit {
   theirs: string;
@@ -392,6 +400,13 @@ export default class LiveCoEditPlugin extends Plugin {
     if (!(af instanceof TFile) || af.extension !== "md") return;
     if (af.stat.size > MAX_FILE_SIZE) return;
 
+    // The chat and audit notes are plugin infrastructure, not co-edited prose.
+    if (af.path === this.settings.chatPath) {
+      this.refreshPanel();
+      return;
+    }
+    if (af.path === this.settings.auditLogPath) return;
+
     // Our own guarded writes are not external edits.
     if (this.selfWrites.delete(af.path)) {
       this.shadows.set(af.path, await this.app.vault.cachedRead(af));
@@ -526,6 +541,54 @@ export default class LiveCoEditPlugin extends Plugin {
     this.dropPending(path);
     this.log(`you rejected the edit from ${pend?.collaborator ?? "collaborator"} in ${path}`);
     this.setStatus(`rejected external edit at ${new Date().toLocaleTimeString()}`);
+  }
+
+  // Accept everything in a pending proposal without opening the dialog.
+  async acceptAllPending(path: string) {
+    const data = this.getReviewData(path);
+    if (!data) return;
+    const proposals = data.segments.filter((s) => s.kind === "proposal");
+    const choices = proposals.map((s) =>
+      s.kind === "proposal" ? true : true
+    );
+    const finalText = composeSegments(data.segments, choices);
+    await this.applyReviewed(path, finalText, choices.length, choices.length);
+  }
+
+  // ---- Chat -------------------------------------------------------------------
+
+  chatDraft = "";
+
+  async chatMessages(): Promise<ChatMessage[]> {
+    const f = this.app.vault.getAbstractFileByPath(this.settings.chatPath);
+    if (!(f instanceof TFile)) return [];
+    const content = await this.app.vault.cachedRead(f);
+    const out: ChatMessage[] = [];
+    for (const line of content.split("\n")) {
+      const m = line.match(/^- \*\*(.+?)\*\* \((.+?)\): (.*)$/);
+      if (m) out.push({ name: m[1], time: m[2], text: m[3] });
+    }
+    return out.slice(-12);
+  }
+
+  async sendChat(text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const entry = `- **${this.settings.userName}** (${time}): ${clean}\n`;
+    const path = this.settings.chatPath;
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    this.selfWrites.add(path);
+    if (existing instanceof TFile) {
+      await this.app.vault.process(existing, (data) => data + entry);
+    } else {
+      await this.app.vault.create(path, `# Co-edit chat\n\n${entry}`);
+    }
+    this.chatDraft = "";
+    this.refreshPanel();
   }
 
   private reviewCommand() {
