@@ -1,10 +1,10 @@
-// Line-based three-way merge, free of Obsidian imports so it can be tested
-// standalone. `base` is the last content both sides agreed on, `mine` is the
-// editor buffer (the user's typing), `theirs` is what's now on disk (the
-// external collaborator's edit).
+// Line-based three-way merge with segment output for reviewable proposals,
+// plus character-level merging inside would-be conflicts. Free of Obsidian
+// imports so it can be tested standalone.
 //
-// Non-overlapping changes merge cleanly. Where both sides changed the same
-// lines, the user's version wins and the hunk is counted as a conflict.
+// `base` is the last content both sides agreed on, `mine` is the editor
+// buffer (the user's typing), `theirs` is what's now on disk (the external
+// collaborator's edit).
 
 export interface MergeResult {
   merged: string;
@@ -18,7 +18,23 @@ export interface Hunk {
   lines: string[];
 }
 
-// LCS-based line diff producing replace-hunks against `base`.
+// The merged document, structured for review:
+// - "plain": text that is not up for review (unchanged, or the user's own
+//   local edits, or changes both sides made identically).
+// - "proposal": an external change. `mine` is what the document holds without
+//   it, `theirs` is the external version. `conflict` means both sides changed
+//   this region differently (and character-merge could not reconcile them).
+export type Segment =
+  | { kind: "plain"; lines: string[] }
+  | { kind: "proposal"; mine: string[]; theirs: string[]; conflict: boolean };
+
+export interface SegmentedMerge {
+  segments: Segment[];
+  conflicts: number;
+}
+
+// LCS-based diff producing replace-hunks against `base`. Works on any string
+// array — lines normally, single characters for the char-level pass.
 export function diffLines(base: string[], other: string[]): Hunk[] {
   const n = base.length;
   const m = other.length;
@@ -90,29 +106,36 @@ function replay(base: string[], hunks: Hunk[], s: number, e: number): string[] {
   return out;
 }
 
-export function merge3(base: string, mine: string, theirs: string): MergeResult {
-  if (mine === theirs) return { merged: mine, conflicts: 0 };
-  if (mine === base) return { merged: theirs, conflicts: 0 };
-  if (theirs === base) return { merged: mine, conflicts: 0 };
+const LCS_GUARD = 25_000_000;
 
-  const b = base.split("\n");
-  const mLines = mine.split("\n");
-  const tLines = theirs.split("\n");
+// Character-level three-way merge of a small region. Returns null when the
+// two sides genuinely overlap at character level too (a true conflict).
+export function charMerge3(
+  base: string,
+  mine: string,
+  theirs: string
+): string | null {
+  if (mine === theirs) return mine;
+  if (mine === base) return theirs;
+  if (theirs === base) return mine;
 
-  // Guard against pathological sizes (LCS is O(n*m)).
-  const tooBig =
-    (b.length + 1) * (mLines.length + 1) > 25_000_000 ||
-    (b.length + 1) * (tLines.length + 1) > 25_000_000;
-  if (tooBig) return { merged: mine, conflicts: 1 };
+  const b = base.split("");
+  const m = mine.split("");
+  const t = theirs.split("");
+  if (
+    (b.length + 1) * (m.length + 1) > LCS_GUARD ||
+    (b.length + 1) * (t.length + 1) > LCS_GUARD
+  ) {
+    return null;
+  }
 
-  const A = diffLines(b, mLines); // user's hunks
-  const B = diffLines(b, tLines); // external hunks
+  const A = diffLines(b, m);
+  const B = diffLines(b, t);
 
   const out: string[] = [];
   let pos = 0;
   let ai = 0;
   let bi = 0;
-  let conflicts = 0;
 
   while (ai < A.length || bi < B.length) {
     const nextA = A[ai];
@@ -120,16 +143,13 @@ export function merge3(base: string, mine: string, theirs: string): MergeResult 
     const first =
       nextA && (!nextB || nextA.baseStart <= nextB.baseStart) ? nextA : nextB;
 
-    // Grow an overlap group around the first hunk.
     let s = first.baseStart;
     let e = first.baseEnd;
     const ga: Hunk[] = [];
     const gb: Hunk[] = [];
-    if (first === nextA) {
-      ga.push(A[ai++]);
-    } else {
-      gb.push(B[bi++]);
-    }
+    if (first === nextA) ga.push(A[ai++]);
+    else gb.push(B[bi++]);
+
     let grew = true;
     while (grew) {
       grew = false;
@@ -149,27 +169,192 @@ export function merge3(base: string, mine: string, theirs: string): MergeResult 
       }
     }
 
-    // Untouched region before the group.
-    for (let k = pos; k < s; k++) out.push(b[k]);
+    // Both sides inserting at the same character position is a conflict —
+    // concatenating them would interleave the two texts nonsensically.
+    if (
+      gb.length === 0 &&
+      s === e &&
+      bi < B.length &&
+      B[bi].baseStart === s &&
+      B[bi].baseEnd === s
+    ) {
+      return null;
+    }
+    if (
+      ga.length === 0 &&
+      s === e &&
+      ai < A.length &&
+      A[ai].baseStart === s &&
+      A[ai].baseEnd === s
+    ) {
+      return null;
+    }
 
-    if (gb.length === 0) {
-      out.push(...replay(b, ga, s, e));
-    } else if (ga.length === 0) {
-      out.push(...replay(b, gb, s, e));
-    } else {
-      const mineText = replay(b, ga, s, e).join("\n");
-      const theirsText = replay(b, gb, s, e).join("\n");
-      if (mineText === theirsText) {
-        out.push(...replay(b, ga, s, e));
-      } else {
-        // Both sides changed the same region: the user's version wins.
-        conflicts++;
-        out.push(...replay(b, ga, s, e));
-      }
+    for (let k = pos; k < s; k++) out.push(b[k]);
+    if (gb.length === 0) out.push(...replay(b, ga, s, e));
+    else if (ga.length === 0) out.push(...replay(b, gb, s, e));
+    else {
+      const mineText = replay(b, ga, s, e).join("");
+      const theirsText = replay(b, gb, s, e).join("");
+      if (mineText === theirsText) out.push(mineText);
+      else return null; // true character-level conflict
     }
     pos = Math.max(pos, e);
   }
   for (let k = pos; k < b.length; k++) out.push(b[k]);
+  return out.join("");
+}
 
-  return { merged: out.join("\n"), conflicts };
+// Structured merge: emits reviewable segments instead of a flat string.
+export function merge3Segments(
+  base: string,
+  mine: string,
+  theirs: string
+): SegmentedMerge {
+  const segments: Segment[] = [];
+  const plain = (lines: string[]) => {
+    if (lines.length === 0) return;
+    const last = segments[segments.length - 1];
+    if (last && last.kind === "plain") last.lines.push(...lines);
+    else segments.push({ kind: "plain", lines: [...lines] });
+  };
+
+  if (mine === theirs) {
+    plain(mine.split("\n"));
+    return { segments, conflicts: 0 };
+  }
+
+  const b = base.split("\n");
+  const mLines = mine.split("\n");
+  const tLines = theirs.split("\n");
+
+  const tooBig =
+    (b.length + 1) * (mLines.length + 1) > LCS_GUARD ||
+    (b.length + 1) * (tLines.length + 1) > LCS_GUARD;
+  if (tooBig) {
+    segments.push({
+      kind: "proposal",
+      mine: mLines,
+      theirs: tLines,
+      conflict: true,
+    });
+    return { segments, conflicts: 1 };
+  }
+
+  const A = diffLines(b, mLines); // user's hunks
+  const B = diffLines(b, tLines); // external hunks
+
+  let pos = 0;
+  let ai = 0;
+  let bi = 0;
+  let conflicts = 0;
+
+  while (ai < A.length || bi < B.length) {
+    const nextA = A[ai];
+    const nextB = B[bi];
+    const first =
+      nextA && (!nextB || nextA.baseStart <= nextB.baseStart) ? nextA : nextB;
+
+    let s = first.baseStart;
+    let e = first.baseEnd;
+    const ga: Hunk[] = [];
+    const gb: Hunk[] = [];
+    if (first === nextA) ga.push(A[ai++]);
+    else gb.push(B[bi++]);
+
+    let grew = true;
+    while (grew) {
+      grew = false;
+      while (ai < A.length && overlaps(A[ai], s, e)) {
+        const h = A[ai++];
+        ga.push(h);
+        s = Math.min(s, h.baseStart);
+        e = Math.max(e, h.baseEnd);
+        grew = true;
+      }
+      while (bi < B.length && overlaps(B[bi], s, e)) {
+        const h = B[bi++];
+        gb.push(h);
+        s = Math.min(s, h.baseStart);
+        e = Math.max(e, h.baseEnd);
+        grew = true;
+      }
+    }
+
+    plain(b.slice(pos, s));
+
+    if (gb.length === 0) {
+      // Only the user touched this region — never up for review.
+      plain(replay(b, ga, s, e));
+    } else if (ga.length === 0) {
+      segments.push({
+        kind: "proposal",
+        mine: b.slice(s, e),
+        theirs: replay(b, gb, s, e),
+        conflict: false,
+      });
+    } else {
+      const mineR = replay(b, ga, s, e);
+      const theirsR = replay(b, gb, s, e);
+      if (mineR.join("\n") === theirsR.join("\n")) {
+        plain(mineR);
+      } else {
+        // Both sides changed this region: try to reconcile per character.
+        const cm = charMerge3(
+          b.slice(s, e).join("\n"),
+          mineR.join("\n"),
+          theirsR.join("\n")
+        );
+        if (cm !== null) {
+          segments.push({
+            kind: "proposal",
+            mine: mineR,
+            theirs: cm.split("\n"),
+            conflict: false,
+          });
+        } else {
+          conflicts++;
+          segments.push({
+            kind: "proposal",
+            mine: mineR,
+            theirs: theirsR,
+            conflict: true,
+          });
+        }
+      }
+    }
+    pos = Math.max(pos, e);
+  }
+  plain(b.slice(pos));
+
+  return { segments, conflicts };
+}
+
+// Compose a document from segments and per-proposal decisions. `choices[i]`
+// corresponds to the i-th proposal segment: true = take theirs, false = keep
+// mine. Missing choices default to the safe side (theirs for clean proposals,
+// mine for conflicts).
+export function composeSegments(
+  segments: Segment[],
+  choices?: boolean[]
+): string {
+  const out: string[] = [];
+  let p = 0;
+  for (const seg of segments) {
+    if (seg.kind === "plain") {
+      out.push(...seg.lines);
+    } else {
+      const take = choices?.[p] ?? !seg.conflict;
+      out.push(...(take ? seg.theirs : seg.mine));
+      p++;
+    }
+  }
+  return out.join("\n");
+}
+
+// Flat-string API used by the automatic mode; keeps the original semantics
+// (external changes in, user wins conflicts) with char-merge improvements.
+export function merge3(base: string, mine: string, theirs: string): MergeResult {
+  const { segments, conflicts } = merge3Segments(base, mine, theirs);
+  return { merged: composeSegments(segments), conflicts };
 }

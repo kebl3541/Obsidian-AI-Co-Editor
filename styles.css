@@ -1,16 +1,26 @@
-/* Text written by the collaborator: marker-style highlight with a subtle
-   underline so it reads as "tracked change", not user formatting. */
+/* Collaborator-written text: marker highlight + underline per color slot. */
 .live-coedit-external {
-  background-color: rgba(var(--color-purple-rgb), 0.16);
-  border-bottom: 2px solid rgba(var(--color-purple-rgb), 0.55);
   border-radius: 2px;
 }
+.live-coedit-slot1 { background-color: rgba(var(--color-purple-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-purple-rgb), 0.55); }
+.live-coedit-slot2 { background-color: rgba(var(--color-cyan-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-cyan-rgb), 0.55); }
+.live-coedit-slot3 { background-color: rgba(var(--color-orange-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-orange-rgb), 0.55); }
+.live-coedit-slot4 { background-color: rgba(var(--color-pink-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-pink-rgb), 0.55); }
+.live-coedit-slot5 { background-color: rgba(var(--color-blue-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-blue-rgb), 0.55); }
+.live-coedit-slot6 { background-color: rgba(var(--color-green-rgb), 0.16); border-bottom: 2px solid rgba(var(--color-green-rgb), 0.55); }
 
-/* Review dialog for pending external edits. */
+/* Embedded %%name: ...%% comments. */
+.live-coedit-comment {
+  background-color: rgba(var(--color-yellow-rgb), 0.18);
+  border-radius: 3px;
+  font-style: italic;
+}
+
+/* Review dialog. */
 .live-coedit-diff {
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
-  max-height: 50vh;
+  max-height: 55vh;
   overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
@@ -33,13 +43,88 @@
   opacity: 0.8;
 }
 
-.live-coedit-sep {
-  border-top: 1px dashed var(--background-modifier-border);
+.live-coedit-skip {
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.live-coedit-hunk {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
   margin: 6px 0;
+  padding: 4px;
+}
+
+.live-coedit-hunk-head {
+  margin-bottom: 4px;
+  font-family: var(--font-interface);
+}
+
+.live-coedit-conflict-tag {
+  color: var(--text-error);
+  font-weight: 600;
+}
+
+.live-coedit-choice {
+  font-family: var(--font-interface);
+  margin-top: 4px;
 }
 
 .live-coedit-buttons {
   display: flex;
   gap: 0.5em;
   justify-content: flex-end;
+}
+
+.live-coedit-reply-input {
+  width: 100%;
+  padding: 0.5em;
+  box-sizing: border-box;
+}
+
+/* Side panel. */
+.live-coedit-panel .live-coedit-section {
+  margin-bottom: 1.2em;
+}
+
+.live-coedit-panel h5 {
+  margin: 0 0 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 2px;
+}
+
+.live-coedit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: var(--font-ui-small);
+}
+
+.live-coedit-clickable {
+  cursor: pointer;
+}
+
+.live-coedit-clickable:hover {
+  color: var(--text-accent);
+}
+
+.live-coedit-chip {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background-color: var(--background-secondary-alt);
+  font-weight: 600;
+  font-size: var(--font-ui-smaller);
+}
+
+.live-coedit-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+.live-coedit-activity {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding: 2px 0;
 }
