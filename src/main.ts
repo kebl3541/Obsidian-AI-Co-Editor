@@ -596,6 +596,16 @@ export default class LiveCoEditPlugin extends Plugin {
     return out.slice(-12);
   }
 
+  async clearChat() {
+    const path = this.settings.chatPath;
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing instanceof TFile) {
+      this.selfWrites.add(path);
+      await this.app.vault.modify(existing, "# Co-edit chat\n\n");
+    }
+    this.refreshPanel();
+  }
+
   async sendChat(text: string) {
     const clean = text.trim();
     if (!clean) return;

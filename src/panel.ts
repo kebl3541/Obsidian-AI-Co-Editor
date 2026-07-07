@@ -92,7 +92,10 @@ export class CoEditPanelView extends ItemView {
     });
     this.iconBtn(header, "refresh-cw", "Refresh", () => void this.refresh());
 
-    // Friendly empty state when nothing is happening (chat still shows below).
+    // Chat lives at the top: it is the steering wheel of the collaboration.
+    this.renderChat(el, msgs);
+
+    // Friendly empty state when nothing else is happening.
     if (
       pendingPaths.length === 0 &&
       marks.length === 0 &&
@@ -100,16 +103,10 @@ export class CoEditPanelView extends ItemView {
       snaps.length === 0
     ) {
       const empty = el.createDiv({ cls: "live-coedit-welcome" });
-      const icon = empty.createDiv({ cls: "live-coedit-welcome-icon" });
-      setIcon(icon, "users");
-      empty.createEl("p", {
-        text: "No collaborator activity yet.",
-      });
       empty.createEl("p", {
         cls: "live-coedit-hint",
-        text: "When your collaborator edits an open note, proposals to review, their highlighted changes, comments, and restore points all show up here.",
+        text: "When your collaborator edits an open note, proposals to review, their highlighted changes, and comments show up here.",
       });
-      this.renderChat(el, msgs);
       return;
     }
 
@@ -213,8 +210,6 @@ export class CoEditPanelView extends ItemView {
         s.createDiv({ cls: "live-coedit-activity", text: entry });
       }
     }
-
-    this.renderChat(el, msgs);
   }
 
   // Chat with the collaborator, backed by the chat note.
@@ -223,6 +218,11 @@ export class CoEditPanelView extends ItemView {
     msgs: Awaited<ReturnType<LiveCoEditPlugin["chatMessages"]>>
   ) {
     const s = this.section(parent, "message-square", "Chat", msgs.length);
+
+    const tools = s.createDiv({ cls: "live-coedit-chattools" });
+    this.iconBtn(tools, "trash-2", "Clear chat history", () => {
+      void this.plugin.clearChat();
+    });
 
     const log = s.createDiv({ cls: "live-coedit-chatlog" });
     for (const m of msgs) {
