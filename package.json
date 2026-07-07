@@ -1,6 +1,6 @@
 {
   "name": "live-coedit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Live three-way merge of external file changes into open Obsidian editors.",
   "main": "main.js",
   "scripts": {
@@ -8,10 +8,17 @@
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "node test/merge.test.mjs"
   },
-  "keywords": ["obsidian", "plugin", "collaboration", "merge"],
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "collaboration",
+    "merge"
+  ],
   "author": "kebl3541",
   "license": "MIT",
   "devDependencies": {
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
     "@types/node": "^20.11.0",
     "esbuild": "^0.20.0",
     "obsidian": "^1.4.11",

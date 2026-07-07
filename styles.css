@@ -1,3 +1,11 @@
+/* Text written by the collaborator: marker-style highlight with a subtle
+   underline so it reads as "tracked change", not user formatting. */
+.live-coedit-external {
+  background-color: rgba(var(--color-purple-rgb), 0.16);
+  border-bottom: 2px solid rgba(var(--color-purple-rgb), 0.55);
+  border-radius: 2px;
+}
+
 /* Review dialog for pending external edits. */
 .live-coedit-diff {
   font-family: var(--font-monospace);

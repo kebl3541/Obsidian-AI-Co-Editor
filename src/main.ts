@@ -10,7 +10,14 @@ import {
   TAbstractFile,
   TFile,
 } from "obsidian";
+import type { EditorView } from "@codemirror/view";
 import { diffLines, merge3 } from "./merge";
+import {
+  MarkRange,
+  addExternalMarks,
+  clearExternalMarks,
+  externalMarksField,
+} from "./marks";
 
 // Live Co-Edit keeps a shadow copy of every open markdown file. When the file
 // changes on disk while it is open (an AI assistant, script, or other editor
@@ -93,6 +100,15 @@ export default class LiveCoEditPlugin extends Plugin {
       name: "Re-sync active file from disk",
       callback: () => void this.resyncActive(),
     });
+
+    this.addCommand({
+      id: "clear-collaborator-highlights",
+      name: "Clear collaborator highlights in active file",
+      callback: () => this.clearHighlights(),
+    });
+
+    // Decoration layer that highlights collaborator-written text.
+    this.registerEditorExtension(externalMarksField);
 
     this.addSettingTab(new LiveCoEditSettingTab(this));
 
@@ -192,6 +208,7 @@ export default class LiveCoEditPlugin extends Plugin {
     }
 
     this.applyMinimalEdit(editor, merged);
+    this.markExternalChanges(editor, buffer, merged);
     this.shadows.set(path, merged);
 
     const time = new Date().toLocaleTimeString();
@@ -203,6 +220,63 @@ export default class LiveCoEditPlugin extends Plugin {
     } else {
       this.setStatus(`merged external edit at ${time}`);
     }
+  }
+
+  // ---- Collaborator-change highlighting -------------------------------------
+
+  private editorView(editor: Editor): EditorView | null {
+    return (editor as unknown as { cm?: EditorView }).cm ?? null;
+  }
+
+  // Highlight the regions of `next` that were not in `prev` — i.e., the text
+  // the collaborator wrote. Ranges are computed per changed line-hunk so
+  // untouched text between two edits is not swept up.
+  private markExternalChanges(editor: Editor, prev: string, next: string) {
+    const view = this.editorView(editor);
+    if (!view) return;
+
+    const prevLines = prev.split("\n");
+    const nextLen: number[] = next.split("\n").map((l) => l.length + 1);
+    const hunks = diffLines(prevLines, next.split("\n"));
+    if (hunks.length === 0) return;
+
+    // Walk both documents to find each hunk's char offsets in `next`.
+    const ranges: MarkRange[] = [];
+    let prevLine = 0;
+    let nextOffset = 0;
+    let nextLine = 0;
+    for (const h of hunks) {
+      // Advance through the unchanged region before the hunk.
+      for (let k = prevLine; k < h.baseStart; k++) {
+        nextOffset += nextLen[nextLine];
+        nextLine++;
+      }
+      const from = nextOffset;
+      for (let k = 0; k < h.lines.length; k++) {
+        nextOffset += nextLen[nextLine];
+        nextLine++;
+      }
+      // Trim the trailing newline from the mark.
+      const to = h.lines.length > 0 ? nextOffset - 1 : nextOffset;
+      if (to > from) ranges.push({ from, to: Math.min(to, next.length) });
+      prevLine = h.baseEnd;
+    }
+
+    if (ranges.length > 0) {
+      view.dispatch({ effects: addExternalMarks.of(ranges) });
+    }
+  }
+
+  private clearHighlights() {
+    const file = this.app.workspace.getActiveFile();
+    const editor = file ? this.findEditorFor(file.path) : null;
+    const view = editor ? this.editorView(editor) : null;
+    if (!view) {
+      new Notice("Open a markdown file first.");
+      return;
+    }
+    view.dispatch({ effects: clearExternalMarks.of(null) });
+    this.setStatus("highlights cleared");
   }
 
   // ---- Approval flow --------------------------------------------------------
@@ -251,7 +325,9 @@ export default class LiveCoEditPlugin extends Plugin {
     if (merged === null) return;
     const editor = this.findEditorFor(path);
     if (editor) {
+      const before = editor.getValue();
       this.applyMinimalEdit(editor, merged);
+      this.markExternalChanges(editor, before, merged);
     } else {
       const f = this.app.vault.getAbstractFileByPath(path);
       if (f instanceof TFile) await this.app.vault.modify(f, merged);
