@@ -171,6 +171,9 @@ export default class LiveCoEditPlugin extends Plugin {
   // loads external changes into clean editors; the absence of recent input is
   // how we tell those apart from the user's own saves.
   private lastUserInput = 0;
+  // Timestamp of the last editor document change from any source. User saves
+  // trail their change by the autosave delay; silent adoptions coincide.
+  private lastEditorChangeAt = 0;
   private lastStatusVisible = false;
 
   // Cache of computed review segments, keyed by content hashes, so panel
@@ -441,6 +444,7 @@ export default class LiveCoEditPlugin extends Plugin {
     let refreshTimer: number | null = null;
     this.registerEvent(
       this.app.workspace.on("editor-change", () => {
+        this.lastEditorChangeAt = Date.now();
         if (refreshTimer !== null) window.clearTimeout(refreshTimer);
         refreshTimer = window.setTimeout(() => {
           this.refreshPanel();
@@ -802,7 +806,14 @@ export default class LiveCoEditPlugin extends Plugin {
     const buffer = editor.getValue();
     if (buffer === disk) {
       const shadow = this.shadows.get(af.path);
-      const userSaved = Date.now() - this.lastUserInput < 4000;
+      const now = Date.now();
+      // A user save follows their edit by the autosave delay, so the last
+      // document change lies comfortably before this disk event. A silent
+      // adoption changes the document at the same instant as the disk event.
+      // Covers plugin-toolbar edits that produce no keyboard input.
+      const userSaved =
+        now - this.lastUserInput < 4000 ||
+        now - this.lastEditorChangeAt > 800;
       if (shadow !== undefined && shadow !== disk && !userSaved) {
         // Obsidian silently loaded an external change into a clean editor.
         // Reclaim it: restore the user's version and raise a proposal.
