@@ -110,6 +110,11 @@ export class CoEditPanelView extends ItemView {
     header.createEl("strong", {
       text: file ? basename(file.path) : "No file open",
     });
+    if (file) {
+      this.iconBtn(header, "history", "File history (external edits)", () =>
+        this.plugin.openHistory(file.path)
+      );
+    }
     this.iconBtn(header, "refresh-cw", "Refresh", () => void this.refresh());
 
     // Chat lives at the top: it is the steering wheel of the collaboration.
@@ -364,7 +369,15 @@ export class CoEditPanelView extends ItemView {
           text: m.target ? `${m.name} → ${m.target}` : m.name,
         });
         row.createSpan({ cls: "live-coedit-lineno", text: ` ${m.time}` });
-        row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+        const req = m.text.match(/^✂️ (.+?)(?: \[\d+-\d+\])?: «[\s\S]*» → (.*)$/);
+        if (req) {
+          const div = row.createDiv({ cls: "live-coedit-chattext" });
+          div.createSpan({ cls: "live-coedit-chip", text: "✂️ " + basename(req[1]) });
+          div.createSpan({ text: ` ${req[2]}` });
+          div.setAttribute("title", m.text);
+        } else {
+          row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+        }
       }
       log.scrollTop = log.scrollHeight;
     }
