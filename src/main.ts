@@ -293,7 +293,7 @@ export default class LiveCoEditPlugin extends Plugin {
     });
     this.addCommand({
       id: "ask-edit-selection",
-      name: "Ask your AI collaborator to edit selection",
+      name: "Ask AI Co-Editor about the selection",
       editorCallback: (editor, view) => {
         if (view instanceof MarkdownView) this.askAboutSelection(editor, view);
       },
@@ -306,7 +306,7 @@ export default class LiveCoEditPlugin extends Plugin {
           return;
         menu.addItem((item) =>
           item
-            .setTitle("Ask your AI collaborator to edit this")
+            .setTitle("Ask AI Co-Editor")
             .setIcon("users")
             .onClick(() => this.askAboutSelection(editor, view))
         );
@@ -2080,32 +2080,22 @@ class ReviewModal extends Modal {
 // ---- Ask-about-selection input --------------------------------------------------
 
 class AskModal extends Modal {
-  private selection: string;
+  // NOTE: never name this field "selection": Obsidian's Modal.open() writes
+  // its own selection-restore state into this.selection, clobbering ours.
+  private passage: string;
   private onDone: (instruction: string) => void;
 
-  constructor(app: App, selection: string, onDone: (instruction: string) => void) {
+  constructor(app: App, passage: string, onDone: (instruction: string) => void) {
     super(app);
-    // Defensive: whatever arrives, the preview shows text, never an object.
-    if (typeof selection === "string") {
-      this.selection = selection;
-    } else {
-      console.warn(
-        "AI Co-Editor: non-string selection reached AskModal:",
-        typeof selection,
-        selection
-      );
-      this.selection = "(could not capture the selected text; your instruction will still be sent)";
-    }
+    this.passage = typeof passage === "string" ? passage : String(passage ?? "");
     this.onDone = onDone;
   }
 
   onOpen() {
-    this.titleEl.setText("Ask your AI collaborator");
+    this.titleEl.setText("Ask AI Co-Editor");
     const preview = this.contentEl.createDiv({ cls: "live-coedit-ask-preview" });
     preview.setText(
-      this.selection.length > 220
-        ? this.selection.slice(0, 220) + "…"
-        : this.selection
+      this.passage.length > 220 ? this.passage.slice(0, 220) + "…" : this.passage
     );
     const input = this.contentEl.createEl("input", { type: "text" });
     input.addClass("live-coedit-reply-input");
