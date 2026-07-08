@@ -1,7 +1,7 @@
 # AI Co-Editor
 
 [![Downloads](https://img.shields.io/github/downloads/kebl3541/Obsidian-AI-Co-Editor/total?style=flat&logo=github&label=Downloads&color=success&cacheSeconds=3600)](https://github.com/kebl3541/Obsidian-AI-Co-Editor/releases)
-[![GitHub stars](https://img.shields.io/github/stars/kebl3541/Obsidian-AI-Co-Editor?style=flat&logo=github&label=Stars&cacheSeconds=3600)](https://github.com/kebl3541/Obsidian-AI-Co-Editor/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/kebl3541/Obsidian-AI-Co-Editor?style=flat&logo=github&label=Stars&cacheSeconds=7200)](https://github.com/kebl3541/Obsidian-AI-Co-Editor/stargazers)
 [![Latest release](https://img.shields.io/github/v/release/kebl3541/Obsidian-AI-Co-Editor?style=flat&label=Release&cacheSeconds=3600)](https://github.com/kebl3541/Obsidian-AI-Co-Editor/releases/latest)
 
 <p align="center">If this plugin adds value for you and you would like to help support
