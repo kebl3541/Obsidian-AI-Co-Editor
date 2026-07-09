@@ -482,8 +482,9 @@ export class CoEditPanelView extends ItemView {
     input.rows = 1;
     input.value = this.plugin.chatDraft;
     const autogrow = () => {
-      input.style.height = "auto";
-      input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+      // Reset, measure, then set: scrollHeight is only honest at height auto.
+      input.setCssStyles({ height: "auto" });
+      input.setCssStyles({ height: `${Math.min(input.scrollHeight, 132)}px` });
     };
 
     // Slash command palette: appears while the draft is exactly "/query".

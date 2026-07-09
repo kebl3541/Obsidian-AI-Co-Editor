@@ -1291,8 +1291,10 @@ export default class LiveCoEditPlugin extends Plugin {
     const btn = this.getAskButton(doc);
     btn.addClass("is-visible");
     // Sit clearly above the selection, never on it.
-    btn.style.top = `${Math.max(8, rect.top - 44)}px`;
-    btn.style.left = `${Math.max(8, rect.left + rect.width / 2 - 60)}px`;
+    btn.setCssStyles({
+      top: `${Math.max(8, rect.top - 44)}px`,
+      left: `${Math.max(8, rect.left + rect.width / 2 - 60)}px`,
+    });
   }
 
   private onAskButton(doc: Document) {
