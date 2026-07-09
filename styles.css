@@ -609,3 +609,77 @@
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
+
+/* --- Slash command palette in the composer -------------------------------- */
+
+.live-coedit-composer-wrap {
+  position: relative;
+}
+
+.live-coedit-slashmenu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--layer-menu, 20);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-s);
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.live-coedit-slashrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+}
+
+.live-coedit-slashrow:hover,
+.live-coedit-slashrow.is-selected {
+  background: var(--background-modifier-hover);
+}
+
+.live-coedit-slashcmd {
+  font-weight: 600;
+  color: var(--text-accent);
+}
+
+.live-coedit-slashhint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* --- Per-hunk actions in the pending preview ------------------------------ */
+
+.live-coedit-preview-hunk {
+  position: relative;
+  padding-right: 44px;
+  border-radius: var(--radius-s);
+}
+
+.live-coedit-preview-hunk:hover {
+  background: var(--background-modifier-hover);
+}
+
+.live-coedit-hunkacts {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 0;
+}
+
+.live-coedit-preview-hunk:hover .live-coedit-hoveract {
+  opacity: 1;
+}
+
+.live-coedit-hunkyes:hover {
+  color: var(--color-green);
+}

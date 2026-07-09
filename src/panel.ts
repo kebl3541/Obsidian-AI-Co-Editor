@@ -18,6 +18,47 @@ function basename(path: string): string {
   return (i >= 0 ? path.slice(i + 1) : path).replace(/\.md$/, "");
 }
 
+// Slash commands: quick prompts for the composer. `{{note}}` becomes a link
+// to the active note. The expansion lands in the input, still editable.
+const SLASH_COMMANDS: { cmd: string; hint: string; template: string }[] = [
+  {
+    cmd: "proofread",
+    hint: "grammar and punctuation only",
+    template:
+      "Please proofread {{note}} for grammar, spelling and punctuation only — no stylistic rewrites. Propose corrections as edits.",
+  },
+  {
+    cmd: "tighten",
+    hint: "cut redundancy, keep the voice",
+    template:
+      "Please tighten the prose in {{note}}: cut redundancy and filler, keep my voice and terminology, do not change the argument.",
+  },
+  {
+    cmd: "footnotes",
+    hint: "check numbering and citations",
+    template:
+      "Please check the footnotes in {{note}}: numbering order, orphaned markers, and that each citation is complete and consistent.",
+  },
+  {
+    cmd: "critique",
+    hint: "comments only, no edits",
+    template:
+      "Please read {{note}} and leave comments where the argument is weakest or a reader would push back. Comments only, no edits.",
+  },
+  {
+    cmd: "outline",
+    hint: "propose a clearer structure",
+    template:
+      "Please propose a clearer section outline for {{note}} as a comment at the top — do not restructure the text yourself.",
+  },
+  {
+    cmd: "summarize",
+    hint: "3–5 sentence summary on top",
+    template:
+      "Please propose a 3–5 sentence summary at the top of {{note}}, as an edit I can review.",
+  },
+];
+
 // Sidebar panel: pending proposals, collaborator changes in the active file,
 // comments, snapshots, and recent activity.
 export class CoEditPanelView extends ItemView {
@@ -264,8 +305,26 @@ export class CoEditPanelView extends ItemView {
 
     const MAX_SHOWN = 3;
     const box = parent.createDiv({ cls: "live-coedit-preview" });
-    for (const p of proposals.slice(0, MAX_SHOWN)) {
+    box.addEventListener("click", (e) => e.stopPropagation());
+    proposals.slice(0, MAX_SHOWN).forEach((p, index) => {
       const para = box.createDiv({ cls: "live-coedit-preview-hunk" });
+
+      // Resolve this hunk right here: the note is opened in editing view so
+      // the same engine as the inline ghosts applies exactly one proposal.
+      const acts = para.createDiv({ cls: "live-coedit-hunkacts live-coedit-hoveract" });
+      const resolveOne = (accept: boolean) => {
+        void (async () => {
+          await this.plugin.openInSource(path);
+          await new Promise((r) => window.setTimeout(r, 300));
+          await this.plugin.resolveProposal(path, index, accept);
+          void this.refresh();
+        })();
+      };
+      const yes = this.iconBtn(acts, "check", "Accept this change", () => resolveOne(true));
+      yes.addClass("live-coedit-hunkyes");
+      const no = this.iconBtn(acts, "x", "Reject this change", () => resolveOne(false));
+      no.addClass("live-coedit-danger");
+
       if (p.conflict) {
         para.createSpan({
           cls: "live-coedit-conflict-tag",
@@ -292,7 +351,7 @@ export class CoEditPanelView extends ItemView {
           para.createSpan({ cls: "live-coedit-w-add", text: tok.text });
         }
       }
-    }
+    });
     if (proposals.length > MAX_SHOWN) {
       box.createDiv({
         cls: "live-coedit-skip-inline",
@@ -412,10 +471,13 @@ export class CoEditPanelView extends ItemView {
     }
 
     // Composer: one rounded surface, auto-growing input, icon send inside.
-    const composer = s.createDiv({ cls: "live-coedit-composer" });
+    const composerWrap = s.createDiv({ cls: "live-coedit-composer-wrap" });
+    const slashMenu = composerWrap.createDiv({ cls: "live-coedit-slashmenu" });
+    slashMenu.hide();
+    const composer = composerWrap.createDiv({ cls: "live-coedit-composer" });
     const input = composer.createEl("textarea", {
-      placeholder: "Message…",
-      attr: { "aria-label": "Message your AI collaborator. Enter sends, Shift+Enter for a new line." },
+      placeholder: "Message… ( / for quick requests)",
+      attr: { "aria-label": "Message your AI collaborator. Enter sends, Shift+Enter for a new line, / for quick requests." },
     });
     input.rows = 1;
     input.value = this.plugin.chatDraft;
@@ -423,10 +485,52 @@ export class CoEditPanelView extends ItemView {
       input.style.height = "auto";
       input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
     };
+
+    // Slash command palette: appears while the draft is exactly "/query".
+    let slashSel = 0;
+    const slashMatches = (): typeof SLASH_COMMANDS => {
+      const m = input.value.match(/^\/(\w*)$/);
+      if (!m) return [];
+      return SLASH_COMMANDS.filter((c) => c.cmd.startsWith(m[1].toLowerCase()));
+    };
+    const applySlash = (c: (typeof SLASH_COMMANDS)[number]) => {
+      const file = this.app.workspace.getActiveFile();
+      const note = file ? `[[${basename(file.path)}]]` : "this note";
+      input.value = c.template.replace(/\{\{note\}\}/g, note);
+      this.plugin.chatDraft = input.value;
+      slashMenu.hide();
+      autogrow();
+      input.focus();
+    };
+    const renderSlash = () => {
+      const matches = slashMatches();
+      if (!matches.length) {
+        slashMenu.hide();
+        return;
+      }
+      slashSel = Math.min(slashSel, matches.length - 1);
+      slashMenu.empty();
+      matches.forEach((c, i) => {
+        const row = slashMenu.createDiv({
+          cls: `live-coedit-slashrow${i === slashSel ? " is-selected" : ""}`,
+        });
+        row.createSpan({ cls: "live-coedit-slashcmd", text: `/${c.cmd}` });
+        row.createSpan({ cls: "live-coedit-slashhint", text: c.hint });
+        row.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          applySlash(c);
+        });
+      });
+      slashMenu.show();
+    };
+
     input.addEventListener("input", () => {
       this.plugin.chatDraft = input.value;
       autogrow();
+      slashSel = 0;
+      renderSlash();
     });
+    input.addEventListener("blur", () => window.setTimeout(() => slashMenu.hide(), 150));
     window.setTimeout(autogrow, 0);
 
     const tools = composer.createDiv({ cls: "live-coedit-composer-tools" });
@@ -452,6 +556,24 @@ export class CoEditPanelView extends ItemView {
       });
     };
     input.addEventListener("keydown", (e) => {
+      const matches = slashMatches();
+      if (matches.length && slashMenu.isShown()) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          slashSel = (slashSel + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length;
+          renderSlash();
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          applySlash(matches[slashSel]);
+          return;
+        }
+        if (e.key === "Escape") {
+          slashMenu.hide();
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         send();
