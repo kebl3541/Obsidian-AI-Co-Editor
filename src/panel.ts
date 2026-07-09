@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import { diffWords } from "./merge";
 import type { Segment } from "./merge";
 import type LiveCoEditPlugin from "./main";
@@ -134,50 +134,43 @@ export class CoEditPanelView extends ItemView {
     if (pendingPaths.length > 0) {
       const s = this.section(el, "bell", "Needs your review", pendingPaths.length);
       for (const path of pendingPaths) {
-        const row = s.createDiv({ cls: "live-coedit-row live-coedit-pending" });
-        row.createSpan({
+        const row = s.createDiv({ cls: "live-coedit-row live-coedit-pending live-coedit-clickable" });
+        const top = row.createDiv({ cls: "live-coedit-rowtop" });
+        top.createSpan({
           cls: "live-coedit-file",
           text: basename(path),
-          attr: { title: path },
+          attr: { title: `${path} — click to review` },
         });
-        const summary = this.plugin.pendingSummary(path);
         const inline = this.plugin.inlineActiveFor(path);
+
+        // Quiet icon actions, revealed on hover. The row itself opens Review.
+        const actions = top.createDiv({ cls: "live-coedit-actions live-coedit-hoveract" });
+        if (!inline) {
+          const inText = this.iconBtn(actions, "file-pen-line", "Review in the note (track changes in place)", () => {
+            void this.plugin.openInSource(path).then(() => this.refresh());
+          });
+          inText.addEventListener("click", (e) => e.stopPropagation());
+        }
+        const accept = this.iconBtn(actions, "check-check", "Accept all", () => {
+          void this.plugin.acceptAllPending(path).then(() => this.refresh());
+        });
+        accept.addEventListener("click", (e) => e.stopPropagation());
+        const reject = this.iconBtn(actions, "x", "Reject all", () => {
+          void this.plugin.rejectPending(path).then(() => this.refresh());
+        });
+        reject.addClass("live-coedit-danger");
+        reject.addEventListener("click", (e) => e.stopPropagation());
+
+        const summary = this.plugin.pendingSummary(path);
         if (summary) {
           row.createSpan({
             cls: "live-coedit-excerpt",
             text: inline ? `${summary} · review in the note` : summary,
           });
         }
-        // When the ghosts are on the page, the page is the review surface;
-        // the panel keeps only the bulk buttons.
-        if (!inline) {
-          const inText = row.createEl("button", {
-            text: "Review in text",
-            cls: "live-coedit-smallbtn",
-            attr: { "aria-label": "Switch this note to editing view and review the changes in place" },
-          });
-          inText.addEventListener("click", () => {
-            void this.plugin.openInSource(path).then(() => this.refresh());
-          });
-          this.renderPendingPreview(row, path);
-        }
-        const review = row.createEl("button", { text: "Review" });
-        review.addClass("mod-cta");
-        review.addEventListener("click", () => this.plugin.openReview(path));
-        const accept = row.createEl("button", {
-          text: "Accept all",
-          cls: "live-coedit-smallbtn",
-        });
-        accept.addEventListener("click", () => {
-          void this.plugin.acceptAllPending(path).then(() => this.refresh());
-        });
-        const reject = row.createEl("button", {
-          text: "Reject",
-          cls: "live-coedit-smallbtn mod-warning",
-        });
-        reject.addEventListener("click", () => {
-          void this.plugin.rejectPending(path).then(() => this.refresh());
-        });
+        // When the ghosts are on the page, the page is the review surface.
+        if (!inline) this.renderPendingPreview(row, path);
+        row.addEventListener("click", () => this.plugin.openReview(path));
       }
     }
 
@@ -197,13 +190,14 @@ export class CoEditPanelView extends ItemView {
         const seen = this.iconBtn(row, "check", "Mark this one as seen", () => {
           this.plugin.dismissMark(file.path, m.from, m.to);
         });
+        seen.addClass("live-coedit-hoveract");
         seen.addEventListener("click", (e) => e.stopPropagation());
         row.createSpan({ cls: "live-coedit-excerpt", text: m.excerpt });
         row.addEventListener("click", () => void this.plugin.jumpTo(file.path, m.from));
       }
       const clear = s.createEl("button", {
         text: "Mark all as seen",
-        cls: "live-coedit-smallbtn",
+        cls: "live-coedit-ghostbtn",
       });
       clear.addEventListener("click", () => {
         this.plugin.clearHighlightsFor(file.path);
@@ -222,7 +216,7 @@ export class CoEditPanelView extends ItemView {
         top.createSpan({ cls: "live-coedit-lineno", text: ` L${c.line + 1}` });
         top.addEventListener("click", () => void this.plugin.jumpTo(file.path, c.from));
         row.createDiv({ cls: "live-coedit-comment-text", text: c.text });
-        const actions = row.createDiv({ cls: "live-coedit-actions" });
+        const actions = row.createDiv({ cls: "live-coedit-actions live-coedit-hoveract" });
         this.iconBtn(actions, "reply", "Reply", () =>
           this.plugin.replyToComment(file.path, anchor)
         );
@@ -240,7 +234,7 @@ export class CoEditPanelView extends ItemView {
         row.createSpan({ text: relTime(snap.ts), attr: { title: new Date(snap.ts).toLocaleString() } });
         const btn = row.createEl("button", {
           text: "Restore",
-          cls: "live-coedit-smallbtn",
+          cls: "live-coedit-ghostbtn live-coedit-hoveract",
         });
         btn.addEventListener("click", () => {
           void this.plugin.restoreSnapshot(file.path, snap).then(() => this.refresh());
@@ -319,8 +313,7 @@ export class CoEditPanelView extends ItemView {
       msgs.length,
       (head) => {
         // Collaborator switcher: only meaningful once there is more than one
-        // collaborator to choose between. With a single collaborator the chat
-        // simply talks to them, no dropdown.
+        // collaborator to choose between.
         const collabs = this.plugin.settings.collaborators;
         if (collabs.length > 1) {
           const select = head.createEl("select", {
@@ -342,52 +335,66 @@ export class CoEditPanelView extends ItemView {
           });
         }
 
-        const open = head.createEl("button", {
-          text: "History",
-          cls: "live-coedit-headbtn",
-          attr: { "aria-label": "Open the full chat note" },
-        });
-        open.addEventListener("click", (e) => {
+        // One quiet overflow menu instead of a row of buttons.
+        const more = this.iconBtn(head, "ellipsis", "Chat options", () => {});
+        more.addEventListener("click", (e) => {
           e.stopPropagation();
-          const arch = this.plugin.chatArchivePath();
-          const target = this.app.vault.getAbstractFileByPath(arch)
-            ? arch
-            : this.plugin.settings.chatPath;
-          void this.app.workspace.openLinkText(target, "", true);
-        });
-        const clear = head.createEl("button", {
-          text: "Clear",
-          cls: "live-coedit-headbtn",
-          attr: { "aria-label": "Clear chat history" },
-        });
-        clear.addEventListener("click", (e) => {
-          e.stopPropagation(); // don't toggle the section fold
-          void this.plugin.clearChat();
+          const menu = new Menu();
+          menu.addItem((i) =>
+            i
+              .setTitle("Open full history")
+              .setIcon("file-clock")
+              .onClick(() => {
+                const arch = this.plugin.chatArchivePath();
+                const target = this.app.vault.getAbstractFileByPath(arch)
+                  ? arch
+                  : this.plugin.settings.chatPath;
+                void this.app.workspace.openLinkText(target, "", true);
+              })
+          );
+          menu.addItem((i) =>
+            i
+              .setTitle("Clear chat")
+              .setIcon("eraser")
+              .onClick(() => void this.plugin.clearChat())
+          );
+          menu.showAtMouseEvent(e);
         });
       }
     );
 
-    // No empty box when there is nothing to show.
-    // No empty box when there is nothing to show.
+    const me = this.plugin.settings.userName;
     const log =
       msgs.length > 0 ? s.createDiv({ cls: "live-coedit-chatlog" }) : null;
     if (log) {
+      let prevSender = "";
       for (const m of msgs) {
-        const row = log.createDiv({ cls: "live-coedit-chatmsg" });
-        row.createSpan({
-          cls: "live-coedit-chip",
-          text: m.target ? `${m.name} → ${m.target}` : m.name,
+        const mine = m.name === me || m.name.startsWith(`${me} `);
+        const sender = m.target ? `${m.name} → ${m.target}` : m.name;
+        // Group consecutive messages: the sender line appears once per run.
+        if (sender !== prevSender) {
+          const meta = log.createDiv({
+            cls: `live-coedit-msgmeta${mine ? " is-mine" : ""}`,
+          });
+          meta.createSpan({ text: sender });
+          meta.createSpan({ cls: "live-coedit-msgtime", text: ` ${m.time}` });
+          prevSender = sender;
+        }
+        const bubble = log.createDiv({
+          cls: `live-coedit-bubble${mine ? " is-mine" : ""}`,
         });
-        row.createSpan({ cls: "live-coedit-lineno", text: ` ${m.time}` });
         const req = m.text.match(/^✂️ (.+?)(?: \[\d+-\d+\])?: «[\s\S]*» → (.*)$/);
         if (req) {
-          const div = row.createDiv({ cls: "live-coedit-chattext" });
-          div.createSpan({ cls: "live-coedit-chip", text: "✂️ " + basename(req[1]) });
-          div.createSpan({ text: ` ${req[2]}` });
-          div.setAttribute("title", m.text);
+          bubble.createSpan({ cls: "live-coedit-chip", text: "✂️ " + basename(req[1]) });
+          bubble.createSpan({ text: ` ${req[2]}` });
+          bubble.setAttribute("title", m.text);
         } else {
-          row.createDiv({ cls: "live-coedit-chattext", text: m.text });
+          bubble.setText(m.text);
         }
+        const copy = this.iconBtn(bubble, "copy", "Copy message", () => {
+          void navigator.clipboard.writeText(m.text);
+        });
+        copy.addClass("live-coedit-hoveract", "live-coedit-msgcopy");
       }
       log.scrollTop = log.scrollHeight;
     }
@@ -404,18 +411,43 @@ export class CoEditPanelView extends ItemView {
       busy.createSpan({ text: ` ${status.name} is working…` });
     }
 
+    // Composer: one rounded surface, auto-growing input, icon send inside.
     const composer = s.createDiv({ cls: "live-coedit-composer" });
     const input = composer.createEl("textarea", {
-      placeholder: "Message your AI collaborator… (Enter sends, Shift+Enter = new line)",
+      placeholder: "Message…",
+      attr: { "aria-label": "Message your AI collaborator. Enter sends, Shift+Enter for a new line." },
     });
-    input.rows = 2;
+    input.rows = 1;
     input.value = this.plugin.chatDraft;
+    const autogrow = () => {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+    };
     input.addEventListener("input", () => {
       this.plugin.chatDraft = input.value;
+      autogrow();
     });
+    window.setTimeout(autogrow, 0);
+
+    const tools = composer.createDiv({ cls: "live-coedit-composer-tools" });
+    const attach = this.iconBtn(tools, "at-sign", "Mention the current note", () => {
+      const file = this.app.workspace.getActiveFile();
+      if (!file) return;
+      const ref = `[[${basename(file.path)}]] `;
+      if (!input.value.includes(ref.trim())) {
+        input.value = `${ref}${input.value}`;
+        this.plugin.chatDraft = input.value;
+        autogrow();
+      }
+      input.focus();
+    });
+    attach.addClass("live-coedit-composer-icon");
+
     const send = () => {
+      if (!input.value.trim()) return;
       void this.plugin.sendChat(input.value).then(() => {
         input.value = "";
+        this.plugin.chatDraft = "";
         void this.refresh(true);
       });
     };
@@ -425,9 +457,9 @@ export class CoEditPanelView extends ItemView {
         send();
       }
     });
-    const btn = composer.createEl("button", { text: "Send" });
-    btn.addClass("mod-cta");
-    btn.addEventListener("click", send);
+    const sendBtn = this.iconBtn(tools, "arrow-up", "Send (Enter)", send);
+    sendBtn.addClass("live-coedit-sendbtn");
+
     // Scroll the chat into view for fast back-and-forth.
     if (log) {
       window.setTimeout(() => log.scrollTo({ top: log.scrollHeight }), 0);
