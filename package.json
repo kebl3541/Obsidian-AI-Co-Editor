@@ -1,12 +1,12 @@
 {
   "name": "live-coedit",
-  "version": "2.19.1",
+  "version": "2.19.2",
   "description": "Co-edit Obsidian notes live with an AI collaborator - track changes, approvals, chat.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild src/merge.ts --format=esm --outfile=test/merge.build.mjs && node test/merge.test.mjs",
+    "test": "esbuild src/merge.ts --format=esm --outfile=test/merge.build.mjs && node test/merge.test.mjs && esbuild test/fields.entry.ts --bundle --format=esm --external:obsidian --outfile=test/fields.build.mjs && node test/fields.test.mjs",
     "deploy": "npm run build && npm test && cp main.js manifest.json styles.css \"/Users/simonaaimar/Desktop/Obsidian/vaults/AI SKILL/.obsidian/plugins/live-coedit/\" && echo DEPLOY-OK"
   },
   "keywords": [

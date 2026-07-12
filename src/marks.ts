@@ -51,12 +51,22 @@ export function markForSlot(slot: number): Decoration {
 export const externalMarksField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(deco, tr) {
-    deco = deco.map(tr.changes);
+    // Never let stale decorations abort the transaction: positions can
+    // outlive the document they were measured on (marks persisted from a
+    // longer version of the note, or an effect aimed at another window's
+    // buffer), and an exception here cancels every other plugin's edit too.
+    try {
+      deco = deco.map(tr.changes);
+    } catch {
+      deco = Decoration.none;
+    }
+    const max = tr.newDoc.length;
     for (const e of tr.effects) {
       if (e.is(addExternalMarks)) {
         const mark = markForSlot(e.value.slot);
         deco = deco.update({
           add: e.value.ranges
+            .map((r) => ({ from: Math.min(r.from, max), to: Math.min(r.to, max) }))
             .filter((r) => r.to > r.from)
             .map((r) => mark.range(r.from, r.to)),
           sort: true,

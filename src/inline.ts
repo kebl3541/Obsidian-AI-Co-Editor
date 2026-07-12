@@ -81,20 +81,30 @@ const delMark = Decoration.mark({
 export const inlineProposalsField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(deco, tr) {
-    deco = deco.map(tr.changes);
+    // See externalMarksField in marks.ts: stale out-of-range positions must
+    // degrade to dropped decorations, never to an aborted transaction (that
+    // would silently cancel other plugins' edits in the same dispatch).
+    try {
+      deco = deco.map(tr.changes);
+    } catch {
+      deco = Decoration.none;
+    }
+    const max = tr.newDoc.length;
     for (const e of tr.effects) {
       if (e.is(setInlineProposals)) {
         const spec = e.value;
         const ranges = [];
         for (const d of spec.dels) {
-          if (d.to > d.from) ranges.push(delMark.range(d.from, d.to));
+          const from = Math.min(d.from, max);
+          const to = Math.min(d.to, max);
+          if (to > from) ranges.push(delMark.range(from, to));
         }
         for (const a of spec.adds) {
           ranges.push(
             Decoration.widget({
               widget: new AddWidget(a.text, a.proposalIndex, spec.path),
               side: 1,
-            }).range(a.pos)
+            }).range(Math.min(a.pos, max))
           );
         }
         ranges.sort((x, y) => x.from - y.from || x.to - y.to);
