@@ -317,13 +317,18 @@ export default class LiveCoEditPlugin extends Plugin {
     );
 
     // Record genuine user input so external adoptions can be distinguished
-    // from the user's own saves.
-    const inputRecorder = (evt: Event) => {
-      const t = evt.target as HTMLElement | null;
-      if (t?.closest?.(".cm-editor")) this.lastUserInput = Date.now();
+    // from the user's own saves. Any keyboard or pointer activity in the app
+    // window counts: edits legitimately triggered from ribbon buttons, modal
+    // popups (e.g. a footnote editor), or other plugins' UI are the user's
+    // doing just as much as typing in the editor is. A headless collaborator
+    // writing files from outside the app produces no DOM events at all, so
+    // the distinction this timestamp exists for is preserved.
+    const inputRecorder = () => {
+      this.lastUserInput = Date.now();
     };
     const armInputRecorder = (doc: Document) => {
       this.registerDomEvent(doc, "keydown", inputRecorder, { capture: true });
+      this.registerDomEvent(doc, "pointerdown", inputRecorder, { capture: true });
       this.registerDomEvent(doc, "beforeinput", inputRecorder, { capture: true });
       this.registerDomEvent(doc, "paste", inputRecorder, { capture: true });
       this.registerDomEvent(doc, "drop", inputRecorder, { capture: true });
@@ -845,6 +850,19 @@ export default class LiveCoEditPlugin extends Plugin {
         this.log(`${who2} edited ${af.path} (applied)`);
       }
       this.shadows.set(af.path, disk);
+      return;
+    }
+
+    // The buffer being ahead of the disk is what mid-typing looks like: the
+    // user (or a plugin acting on their gesture) edited after the autosave
+    // was cut. The next save reconciles it; raising a proposal here turns
+    // the user's own in-flight edits into a bogus approval. Only a quiet
+    // editor with a diverging disk indicates a collaborator write.
+    const nowDiverged = Date.now();
+    if (
+      nowDiverged - this.lastUserInput < 4000 &&
+      nowDiverged - this.lastEditorChangeAt < 1500
+    ) {
       return;
     }
 
