@@ -504,7 +504,7 @@ export default class LiveCoEditPlugin extends Plugin {
           if (disk !== prev) {
             const who = await this.collaboratorName();
             const guarded = this.applyProtectedRegions(prev, disk);
-            this.pending.set(path, { theirs: guarded, base: prev, collaborator: who });
+            this.pending.set(path, { theirs: this.tidyIncoming(guarded), base: prev, collaborator: who });
             this.announcePending(path, who);
             this.log(`${who} edited ${path} while Obsidian was closed`);
           }
@@ -748,6 +748,25 @@ export default class LiveCoEditPlugin extends Plugin {
     return out;
   }
 
+  // Incoming proposal text gets its footnotes normalized (reading-order
+  // numbering, sorted definitions) by the Footnote Inline Editor plugin when
+  // it is installed — so ghosts and previews already show final numbers and
+  // accepting a proposal never triggers a visible renumber afterwards.
+  private tidyIncoming(text: string): string {
+    const fp = (
+      this.app as unknown as {
+        plugins?: {
+          plugins?: Record<string, { tidyText?: (t: string) => string }>;
+        };
+      }
+    ).plugins?.plugins?.["footnote-inline-editor"];
+    try {
+      return fp?.tidyText ? fp.tidyText(text) : text;
+    } catch {
+      return text;
+    }
+  }
+
   private async onDiskChange(af: TAbstractFile) {
     if (!(af instanceof TFile) || af.extension !== "md") return;
     if (af.stat.size > this.maxFileBytes()) return;
@@ -797,7 +816,7 @@ export default class LiveCoEditPlugin extends Plugin {
       ) {
         const who = await this.collaboratorName();
         const guarded = this.applyProtectedRegions(prev, disk);
-        this.pending.set(af.path, { theirs: guarded, base: prev, collaborator: who });
+        this.pending.set(af.path, { theirs: this.tidyIncoming(guarded), base: prev, collaborator: who });
         void this.saveSettings();
         this.announcePending(af.path, who);
         this.log(`${who} proposed an edit to ${af.path} (file closed)`);
@@ -832,7 +851,7 @@ export default class LiveCoEditPlugin extends Plugin {
         const guarded2 = this.applyProtectedRegions(shadow, disk);
         if (mode === "approve") {
           this.pending.set(af.path, {
-            theirs: guarded2,
+            theirs: this.tidyIncoming(guarded2),
             base: shadow,
             collaborator: who2,
           });
@@ -871,7 +890,7 @@ export default class LiveCoEditPlugin extends Plugin {
     const guarded = this.applyProtectedRegions(buffer, disk);
 
     if (mode === "approve") {
-      this.pending.set(af.path, { theirs: guarded, base, collaborator: who });
+      this.pending.set(af.path, { theirs: this.tidyIncoming(guarded), base, collaborator: who });
       void this.saveSettings();
       this.announcePending(af.path, who);
       this.refreshInlineProposals(af.path);
